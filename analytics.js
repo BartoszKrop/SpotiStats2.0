@@ -45,27 +45,48 @@ function updateCounter(counter, key, ms) {
 }
 
 export function normalizeHistoryRows(rawRows) {
-  return rawRows
-    .map((row) => {
-      const timestamp = row.ts || row.endTime || row.end_time;
-      const artist =
-        row.master_metadata_album_artist_name || row.artistName || row.artist || 'Unknown artist';
-      const track = row.master_metadata_track_name || row.trackName || row.track || 'Unknown track';
-      const album =
-        row.master_metadata_album_album_name || row.albumName || row.album || 'Unknown album';
-      const msPlayed = Number(row.ms_played ?? row.msPlayed ?? 0);
-      if (!timestamp || Number.isNaN(msPlayed) || msPlayed <= 0) return null;
-      const parsed = new Date(timestamp);
-      if (Number.isNaN(parsed.getTime())) return null;
-      return {
-        timestamp: parsed.toISOString(),
-        artist,
-        track,
-        album,
-        msPlayed
-      };
-    })
-    .filter(Boolean);
+  return normalizeHistoryRowsWithReport(rawRows).rows;
+}
+
+export function normalizeHistoryRowsWithReport(rawRows) {
+  const rows = [];
+  let invalidRows = 0;
+
+  for (const row of rawRows) {
+    const timestamp = row?.ts || row?.endTime || row?.end_time;
+    const artist =
+      row?.master_metadata_album_artist_name || row?.artistName || row?.artist || 'Unknown artist';
+    const track =
+      row?.master_metadata_track_name || row?.trackName || row?.track || 'Unknown track';
+    const album =
+      row?.master_metadata_album_album_name || row?.albumName || row?.album || 'Unknown album';
+    const msPlayed = Number(row?.ms_played ?? row?.msPlayed ?? 0);
+
+    if (!timestamp || Number.isNaN(msPlayed) || msPlayed <= 0) {
+      invalidRows += 1;
+      continue;
+    }
+
+    const parsed = new Date(timestamp);
+    if (Number.isNaN(parsed.getTime())) {
+      invalidRows += 1;
+      continue;
+    }
+
+    rows.push({
+      timestamp: parsed.toISOString(),
+      artist,
+      track,
+      album,
+      msPlayed
+    });
+  }
+
+  return {
+    rows,
+    invalidRows,
+    totalRows: rawRows.length
+  };
 }
 
 export function parseGenreMap(rawGenreData) {

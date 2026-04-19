@@ -1,4 +1,4 @@
-import { buildStats, filterByRange, normalizeHistoryRows, parseGenreMap } from './analytics.js';
+import { buildStats, filterByRange, normalizeHistoryRowsWithReport, parseGenreMap } from './analytics.js';
 
 const historyInput = document.getElementById('historyFiles');
 const genreInput = document.getElementById('genreFile');
@@ -10,6 +10,7 @@ const patternsEl = document.getElementById('patterns');
 
 let entries = [];
 let genreMap = new Map();
+let rangeCache = new Map();
 
 function escapeHtml(value) {
   return String(value)
@@ -32,8 +33,11 @@ function list(items) {
 
 function render() {
   const selectedRange = rangeSelect.value;
-  const filtered = filterByRange(entries, selectedRange);
-  const stats = buildStats(filtered, genreMap);
+  if (!rangeCache.has(selectedRange)) {
+    const filtered = filterByRange(entries, selectedRange);
+    rangeCache.set(selectedRange, buildStats(filtered, genreMap));
+  }
+  const stats = rangeCache.get(selectedRange);
 
   summaryEl.innerHTML = `
     <h2>Summary (${escapeHtml(selectedRange)})</h2>
@@ -71,8 +75,24 @@ function render() {
 
 async function readJsonFiles(fileList) {
   const files = [...fileList];
-  const contents = await Promise.all(files.map((file) => file.text()));
-  return contents.flatMap((text) => JSON.parse(text));
+  const contents = await Promise.all(files.map(async (file) => ({ name: file.name, text: await file.text() })));
+  const rows = [];
+  const errors = [];
+
+  for (const file of contents) {
+    try {
+      const parsed = JSON.parse(file.text);
+      if (!Array.isArray(parsed)) {
+        errors.push(`${file.name}: root value must be an array`);
+        continue;
+      }
+      rows.push(...parsed);
+    } catch {
+      errors.push(`${file.name}: invalid JSON`);
+    }
+  }
+
+  return { rows, errors };
 }
 
 historyInput.addEventListener('change', async (event) => {
@@ -84,9 +104,16 @@ historyInput.addEventListener('change', async (event) => {
   }
 
   try {
-    const rawRows = await readJsonFiles(files);
-    entries = normalizeHistoryRows(rawRows);
-    status.textContent = `Loaded ${entries.length} listening events.`;
+    const { rows: rawRows, errors } = await readJsonFiles(files);
+    const report = normalizeHistoryRowsWithReport(rawRows);
+    entries = report.rows;
+    rangeCache = new Map();
+    const statusBits = [
+      `Loaded ${entries.length} listening events from ${report.totalRows} rows`
+    ];
+    if (report.invalidRows > 0) statusBits.push(`${report.invalidRows} rows skipped`);
+    if (errors.length > 0) statusBits.push(`${errors.length} file(s) had parsing issues`);
+    status.textContent = `${statusBits.join(' · ')}.`;
     render();
   } catch {
     status.textContent = 'Could not parse one of the history JSON files.';
@@ -103,6 +130,7 @@ genreInput.addEventListener('change', async (event) => {
 
   try {
     genreMap = parseGenreMap(JSON.parse(await file.text()));
+    rangeCache = new Map();
     status.textContent = `${status.textContent} Genre map loaded for ${genreMap.size} artists.`;
     if (entries.length) render();
   } catch {
