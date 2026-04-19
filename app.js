@@ -11,10 +11,22 @@ const patternsEl = document.getElementById('patterns');
 let entries = [];
 let genreMap = new Map();
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
 function list(items) {
   if (!items.length) return '<p>No data in this range.</p>';
   return `<ol>${items
-    .map((item) => `<li>${item.label} · ${item.hours}h · ${item.plays} plays</li>`)
+    .map(
+      (item) =>
+        `<li>${escapeHtml(item.label)} · ${item.hours}h · ${item.plays} plays</li>`
+    )
     .join('')}</ol>`;
 }
 
@@ -24,7 +36,7 @@ function render() {
   const stats = buildStats(filtered, genreMap);
 
   summaryEl.innerHTML = `
-    <h2>Summary (${selectedRange})</h2>
+    <h2>Summary (${escapeHtml(selectedRange)})</h2>
     <div class="kpi"><span>Total plays</span><strong>${stats.summary.totalPlays}</strong></div>
     <div class="kpi"><span>Total hours listened</span><strong>${stats.summary.totalHours}h</strong></div>
     <div class="kpi"><span>Avg daily listening</span><strong>${stats.summary.avgDailyMinutes} min</strong></div>

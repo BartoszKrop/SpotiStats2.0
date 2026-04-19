@@ -28,7 +28,7 @@ SpotiStats 2.0 is a lightweight self-hosted stats.fm-style dashboard for Spotify
 
 ## Run locally
 
-Open `/home/runner/work/SpotiStats2.0/SpotiStats2.0/index.html` in a browser.
+Open `index.html` in a browser.
 
 ## Genre map format (optional)
 
@@ -53,5 +53,5 @@ or
 Run:
 
 ```bash
-node --test /home/runner/work/SpotiStats2.0/SpotiStats2.0/analytics.test.js
+node --test analytics.test.js
 ```
