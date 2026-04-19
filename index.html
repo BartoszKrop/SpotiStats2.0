@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SpotiStats 2.0</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <h1>SpotiStats 2.0</h1>
+        <p>
+          Upload your Spotify history export and explore top artists, tracks, albums,
+          genres, and listening patterns across multiple time ranges.
+        </p>
+      </header>
+
+      <section class="panel">
+        <h2>Data source</h2>
+        <div class="inputs">
+          <label class="input-group">
+            <span>Spotify streaming history JSON files</span>
+            <input id="historyFiles" type="file" accept="application/json" multiple />
+          </label>
+          <label class="input-group">
+            <span>Optional artist genre map JSON</span>
+            <input id="genreFile" type="file" accept="application/json" />
+          </label>
+          <label class="input-group">
+            <span>Time range</span>
+            <select id="timeRange">
+              <option value="all">All time</option>
+              <option value="12m">Last 12 months</option>
+              <option value="year">Current year</option>
+              <option value="6m">Last 6 months</option>
+              <option value="3m">Last 3 months</option>
+              <option value="1m">Last 1 month</option>
+              <option value="1w">Last 1 week</option>
+              <option value="today">Today</option>
+            </select>
+          </label>
+        </div>
+        <p id="status" class="status">No data loaded yet.</p>
+      </section>
+
+      <section id="summary" class="panel hidden"></section>
+
+      <section id="tops" class="panel hidden grid-2"></section>
+
+      <section id="patterns" class="panel hidden grid-2"></section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
