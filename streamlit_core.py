@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 TOP_LIMIT = 10
+# Python datetime.weekday() uses Monday=0 ... Sunday=6 (different from JS Date.getDay()).
 WEEKDAY = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 

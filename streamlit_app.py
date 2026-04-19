@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 import streamlit as st
@@ -29,9 +28,6 @@ RANGES = {
     "Today": "today",
     "Custom range": "custom",
 }
-
-CACHE_DIR = Path(".streamlit-cache")
-CACHE_DIR.mkdir(exist_ok=True)
 
 st.set_page_config(page_title="SpotiStats 2.0 Streamlit", layout="wide")
 st.title("SpotiStats 2.0 — Streamlit MVP")
@@ -159,10 +155,6 @@ if not history_files:
 history_payloads = [file.getvalue().decode("utf-8", errors="ignore") for file in history_files]
 parsed_history = parse_history_payload(history_payloads)
 
-if parsed_history["rows"]:
-    cache_path = CACHE_DIR / "last_rows_count.txt"
-    cache_path.write_text(str(len(parsed_history["rows"])), encoding="utf-8")
-
 genre_payload = genre_file.getvalue().decode("utf-8", errors="ignore") if genre_file else None
 genre_map = parse_genres_payload(genre_payload)
 
@@ -228,6 +220,6 @@ filtered_history_entries = filter_history(
     album_contains=album_filter,
     track_contains=track_filter,
 )
-filtered_history_stats = build_stats(filtered_history_entries, genre_map)
-st.caption(f"History rows after filters: {len(filtered_history_stats['history'])}")
-st.dataframe(filtered_history_stats["history"][:1000], use_container_width=True, hide_index=True)
+filtered_stats = build_stats(filtered_history_entries, genre_map)
+st.caption(f"History rows after filters: {len(filtered_stats['history'])}")
+st.dataframe(filtered_stats["history"][:1000], use_container_width=True, hide_index=True)
