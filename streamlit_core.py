@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -89,32 +89,58 @@ def parse_genre_map(raw_data: Any) -> dict[str, list[str]]:
     return {}
 
 
-def filter_by_range(entries: list[dict[str, Any]], range_key: str, now: datetime | None = None) -> list[dict[str, Any]]:
+def filter_by_range(
+    entries: list[dict[str, Any]],
+    range_key: str,
+    now: datetime | None = None,
+    custom_start: datetime | None = None,
+    custom_end: datetime | None = None,
+) -> list[dict[str, Any]]:
     now = now or datetime.now(timezone.utc)
 
     if range_key == "all":
         lower = None
+        upper = now
+    elif range_key == "4w":
+        lower = now - timedelta(days=28)
+        upper = now
     elif range_key == "12m":
         lower = now - timedelta(days=365)
+        upper = now
+    elif range_key == "last_year":
+        lower = datetime(now.year - 1, 1, 1, tzinfo=timezone.utc)
+        upper = datetime(now.year - 1, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
     elif range_key == "year":
         lower = datetime(now.year, 1, 1, tzinfo=timezone.utc)
+        upper = now
     elif range_key == "6m":
         lower = now - timedelta(days=183)
+        upper = now
     elif range_key == "3m":
         lower = now - timedelta(days=92)
+        upper = now
     elif range_key == "1m":
         lower = now - timedelta(days=31)
+        upper = now
     elif range_key == "1w":
         lower = now - timedelta(days=7)
+        upper = now
     elif range_key == "today":
         lower = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+        upper = now
+    elif range_key == "custom":
+        if custom_start is None or custom_end is None:
+            return entries
+        lower = custom_start
+        upper = custom_end
     else:
         lower = None
+        upper = now
 
     if lower is None:
         return entries
 
-    return [entry for entry in entries if lower <= entry["timestamp"] <= now]
+    return [entry for entry in entries if lower <= entry["timestamp"] <= upper]
 
 
 def _top(counter: dict[str, dict[str, float]]) -> list[dict[str, Any]]:
@@ -176,4 +202,35 @@ def build_stats(entries: list[dict[str, Any]], genre_map: dict[str, list[str]]) 
         "top_genres": _top(genre_counter),
         "weekday_hours": [{"day": day, "hours": round(ms / 3_600_000, 2)} for day, ms in by_weekday.items()],
         "hourly_hours": [{"hour": hour, "hours": round(ms / 3_600_000, 2)} for hour, ms in by_hour.items()],
+        "daily_hours": [{"date": date, "hours": round(ms / 3_600_000, 2)} for date, ms in sorted(by_day.items())],
+        "history": [
+            {
+                "timestamp": entry["timestamp"].isoformat(),
+                "artist": entry["artist"],
+                "track": entry["track"],
+                "album": entry["album"],
+                "minutes": round(entry["ms_played"] / 60_000, 2),
+            }
+            for entry in sorted(entries, key=lambda row: row["timestamp"], reverse=True)
+        ],
     }
+
+
+def filter_history(
+    entries: list[dict[str, Any]],
+    artist_contains: str = "",
+    album_contains: str = "",
+    track_contains: str = "",
+) -> list[dict[str, Any]]:
+    artist_query = artist_contains.strip().lower()
+    album_query = album_contains.strip().lower()
+    track_query = track_contains.strip().lower()
+
+    out = entries
+    if artist_query:
+        out = [entry for entry in out if artist_query in entry["artist"].lower()]
+    if album_query:
+        out = [entry for entry in out if album_query in entry["album"].lower()]
+    if track_query:
+        out = [entry for entry in out if track_query in entry["track"].lower()]
+    return out

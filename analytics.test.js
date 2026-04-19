@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildStats, filterByRange, normalizeHistoryRows, parseGenreMap } from './analytics.js';
+import {
+  buildStats,
+  filterByRange,
+  normalizeHistoryRows,
+  normalizeHistoryRowsWithReport,
+  parseGenreMap
+} from './analytics.js';
 
 const sampleRows = [
   {
@@ -58,4 +64,22 @@ test('buildStats returns top entities and activity metrics', () => {
   );
   assert.equal(stats.weekdayHours.length, 7);
   assert.equal(stats.hourlyHours.length, 24);
+});
+
+test('normalizeHistoryRowsWithReport counts invalid and keeps valid rows', () => {
+  const report = normalizeHistoryRowsWithReport([
+    { endTime: '2026-04-19T10:00:00Z', artistName: 'A', trackName: 'T1', albumName: 'L1', msPlayed: 1000 },
+    { endTime: 'invalid', artistName: 'A', trackName: 'T1', albumName: 'L1', msPlayed: 1000 },
+    { endTime: '2026-04-19T11:00:00Z', artistName: 'B', trackName: 'T2', albumName: 'L2', msPlayed: 0 },
+    {}
+  ]);
+
+  assert.equal(report.rows.length, 1);
+  assert.equal(report.invalidRows, 3);
+  assert.equal(report.totalRows, 4);
+});
+
+test('normalizeHistoryRows handles empty input and parseGenreMap ignores invalid schema', () => {
+  assert.deepEqual(normalizeHistoryRows([]), []);
+  assert.equal(parseGenreMap('not-an-object').size, 0);
 });
