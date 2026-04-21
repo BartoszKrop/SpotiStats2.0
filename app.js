@@ -7,10 +7,21 @@ const status = document.getElementById('status');
 const summaryEl = document.getElementById('summary');
 const topsEl = document.getElementById('tops');
 const patternsEl = document.getElementById('patterns');
+const loadDemoBtn = document.getElementById('loadDemoBtn');
+const clearDataBtn = document.getElementById('clearDataBtn');
+const MIN_TOP_BAR_WIDTH_PERCENT = 4;
+const MIN_PATTERN_BAR_WIDTH_PERCENT = 2;
 
 let entries = [];
 let genreMap = new Map();
 let rangeCache = new Map();
+const DEMO_GENRE_MAP = new Map([
+  ['Daft Punk', ['electronic', 'french house']],
+  ['The Weeknd', ['r&b', 'pop']],
+  ['Tame Impala', ['psychedelic rock', 'indie']],
+  ['Dua Lipa', ['pop', 'dance pop']],
+  ['Arctic Monkeys', ['indie rock', 'alternative']]
+]);
 
 function escapeHtml(value) {
   return String(value)
@@ -23,12 +34,77 @@ function escapeHtml(value) {
 
 function list(items) {
   if (!items.length) return '<p>No data in this range.</p>';
-  return `<ol>${items
+  const maxHours = Math.max(...items.map((item) => item.hours), 0);
+  return `<ol class="bar-list">${items
     .map(
-      (item) =>
-        `<li>${escapeHtml(item.label)} · ${item.hours}h · ${item.plays} plays</li>`
+      (item) => {
+        const width =
+          maxHours > 0
+            ? Math.max((item.hours / maxHours) * 100, MIN_TOP_BAR_WIDTH_PERCENT)
+            : 0;
+        return `<li class="bar-row">
+          <div class="bar-label">${escapeHtml(item.label)}</div>
+          <div class="bar-track"><span class="bar-fill" style="width:${width}%"></span></div>
+          <div class="bar-meta">${item.hours}h · ${item.plays} plays</div>
+        </li>`;
+      }
     )
     .join('')}</ol>`;
+}
+
+function patternList(rows, labelBuilder) {
+  if (!rows.length) return '<p>No data in this range.</p>';
+  const maxHours = Math.max(...rows.map((row) => row.hours), 0);
+  return `<ul class="bar-list">${rows
+    .map((row) => {
+      const width =
+        maxHours > 0
+          ? Math.max((row.hours / maxHours) * 100, MIN_PATTERN_BAR_WIDTH_PERCENT)
+          : 0;
+      return `<li class="bar-row">
+        <div class="bar-label">${escapeHtml(labelBuilder(row))}</div>
+        <div class="bar-track"><span class="bar-fill" style="width:${width}%"></span></div>
+        <div class="bar-meta">${row.hours}h</div>
+      </li>`;
+    })
+    .join('')}</ul>`;
+}
+
+function hideResults() {
+  summaryEl.classList.add('hidden');
+  topsEl.classList.add('hidden');
+  patternsEl.classList.add('hidden');
+}
+
+function createDemoEntries() {
+  const artists = [
+    { artist: 'Daft Punk', track: 'Get Lucky', album: 'Random Access Memories' },
+    { artist: 'The Weeknd', track: 'Blinding Lights', album: 'After Hours' },
+    { artist: 'Tame Impala', track: 'The Less I Know The Better', album: 'Currents' },
+    { artist: 'Dua Lipa', track: 'Levitating', album: 'Future Nostalgia' },
+    { artist: 'Arctic Monkeys', track: 'Do I Wanna Know?', album: 'AM' }
+  ];
+  const now = new Date();
+  const demo = [];
+
+  for (let day = 0; day < 120; day += 1) {
+    const sessions = (day % 3) + 1;
+    for (let s = 0; s < sessions; s += 1) {
+      const pick = artists[(day + s) % artists.length];
+      const timestamp = new Date(
+        now.getTime() - day * 24 * 60 * 60 * 1000 + (8 + ((day + s) % 14)) * 60 * 60 * 1000
+      );
+      demo.push({
+        timestamp: timestamp.toISOString(),
+        artist: pick.artist,
+        track: pick.track,
+        album: pick.album,
+        msPlayed: 120_000 + ((day * 17 + s * 23) % 200_000)
+      });
+    }
+  }
+
+  return demo;
 }
 
 function render() {
@@ -56,15 +132,11 @@ function render() {
   patternsEl.innerHTML = `
     <article class="card">
       <h3>Listening by weekday</h3>
-      <ul>${stats.weekdayHours
-        .map((row) => `<li>${row.day}: ${row.hours}h</li>`)
-        .join('')}</ul>
+      ${patternList(stats.weekdayHours, (row) => row.day)}
     </article>
     <article class="card">
       <h3>Listening by hour</h3>
-      <ul>${stats.hourlyHours
-        .map((row) => `<li>${String(row.hour).padStart(2, '0')}:00 — ${row.hours}h</li>`)
-        .join('')}</ul>
+      ${patternList(stats.hourlyHours, (row) => `${String(row.hour).padStart(2, '0')}:00`)}
     </article>
   `;
 
@@ -99,6 +171,8 @@ historyInput.addEventListener('change', async (event) => {
   const files = event.target.files;
   if (!files || files.length === 0) {
     entries = [];
+    rangeCache = new Map();
+    hideResults();
     status.textContent = 'No data loaded yet.';
     return;
   }
@@ -122,7 +196,7 @@ historyInput.addEventListener('change', async (event) => {
 
 genreInput.addEventListener('change', async (event) => {
   const file = event.target.files?.[0];
-  if (!file) {
+    if (!file) {
     genreMap = new Map();
     if (entries.length) render();
     return;
@@ -140,4 +214,22 @@ genreInput.addEventListener('change', async (event) => {
 
 rangeSelect.addEventListener('change', () => {
   if (entries.length) render();
+});
+
+loadDemoBtn.addEventListener('click', () => {
+  entries = createDemoEntries();
+  genreMap = new Map(DEMO_GENRE_MAP);
+  rangeCache = new Map();
+  status.textContent = `Loaded ${entries.length} demo listening events with a sample genre map.`;
+  render();
+});
+
+clearDataBtn.addEventListener('click', () => {
+  entries = [];
+  genreMap = new Map();
+  rangeCache = new Map();
+  historyInput.value = '';
+  genreInput.value = '';
+  hideResults();
+  status.textContent = 'No data loaded yet.';
 });
