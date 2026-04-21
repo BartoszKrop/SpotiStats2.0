@@ -9,6 +9,8 @@ const topsEl = document.getElementById('tops');
 const patternsEl = document.getElementById('patterns');
 const loadDemoBtn = document.getElementById('loadDemoBtn');
 const clearDataBtn = document.getElementById('clearDataBtn');
+const MIN_TOP_BAR_WIDTH_PERCENT = 4;
+const MIN_PATTERN_BAR_WIDTH_PERCENT = 2;
 
 let entries = [];
 let genreMap = new Map();
@@ -36,7 +38,10 @@ function list(items) {
   return `<ol class="bar-list">${items
     .map(
       (item) => {
-        const width = maxHours > 0 ? Math.max((item.hours / maxHours) * 100, 4) : 0;
+        const width =
+          maxHours > 0
+            ? Math.max((item.hours / maxHours) * 100, MIN_TOP_BAR_WIDTH_PERCENT)
+            : 0;
         return `<li class="bar-row">
           <div class="bar-label">${escapeHtml(item.label)}</div>
           <div class="bar-track"><span class="bar-fill" style="width:${width}%"></span></div>
@@ -52,7 +57,10 @@ function patternList(rows, labelBuilder) {
   const maxHours = Math.max(...rows.map((row) => row.hours), 0);
   return `<ul class="bar-list">${rows
     .map((row) => {
-      const width = maxHours > 0 ? Math.max((row.hours / maxHours) * 100, 2) : 0;
+      const width =
+        maxHours > 0
+          ? Math.max((row.hours / maxHours) * 100, MIN_PATTERN_BAR_WIDTH_PERCENT)
+          : 0;
       return `<li class="bar-row">
         <div class="bar-label">${escapeHtml(labelBuilder(row))}</div>
         <div class="bar-track"><span class="bar-fill" style="width:${width}%"></span></div>
