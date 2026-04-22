@@ -4,8 +4,15 @@ SpotiStats 2.0 is a lightweight self-hosted stats.fm-style dashboard for Spotify
 
 ## Features
 
-- Import one or many Spotify JSON listening history files
-- Optional genre enrichment through an artist→genres JSON map
+- New onboarding flow with local account auth screen (register / login) and separate dashboard view
+- Local-only account storage (username + salted/hashed password) in browser storage
+- Session persistence after refresh and explicit logout
+- Import Spotify history from:
+  - one or many JSON files
+  - ZIP archives containing multiple JSON files (including multi-year exports)
+- Automatic normalization + merge of imported rows with parsing/skip reporting
+- Persistent local storage per user for imported history, genre map, source state, and selected time range
+- Clear local user data action
 - Time ranges:
   - all time
   - last 12 months
@@ -29,6 +36,27 @@ SpotiStats 2.0 is a lightweight self-hosted stats.fm-style dashboard for Spotify
 ## Run locally
 
 Open `index.html` in a browser.
+
+## Local login flow
+
+1. Open app and choose **Logowanie** or **Rejestracja**.
+2. Create a local account (stored only in this browser on this device).
+3. Log in to enter dashboard.
+4. On next app load, active session is restored automatically.
+5. Use **Wyloguj** to end the session.
+
+## ZIP import flow
+
+1. In dashboard, choose one or more files in **Pliki historii Spotify (.json lub .zip)**.
+2. ZIP files are unpacked client-side and all JSON files inside are parsed.
+3. Parsed rows are merged and normalized the same way as direct JSON import.
+4. Status shows loaded records, skipped rows, and parsing/file errors.
+
+## Persistent storage and reset
+
+- Each local account has its own saved history, genre map, source metadata, and range setting.
+- After login, saved local data is automatically loaded (manual reimport is optional).
+- Use **Wyczyść lokalne dane** to remove saved analytics data for the current user.
 
 ### Streamlit MVP (test mode)
 
