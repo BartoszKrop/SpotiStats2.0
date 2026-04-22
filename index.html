@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="pl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,51 +8,102 @@
   </head>
   <body>
     <main class="app-shell">
-      <header class="hero">
-        <h1>SpotiStats 2.0</h1>
-        <p>
-          Upload your Spotify history export and explore top artists, tracks, albums,
-          genres, and listening patterns across multiple time ranges.
-        </p>
-      </header>
+      <section id="authScreen" class="surface auth-surface">
+        <header class="auth-header">
+          <p class="eyebrow">SpotiStats 2.0</p>
+          <h1>Twoje lokalne centrum statystyk Spotify</h1>
+          <p>
+            Załóż konto lokalne na tym urządzeniu, zaloguj się i pracuj na zapisanych
+            danych bez ponownego uploadu przy każdym wejściu.
+          </p>
+        </header>
 
-      <section class="panel">
-        <h2>Data source</h2>
-        <div class="inputs">
-          <label class="input-group">
-            <span>Spotify streaming history JSON files</span>
-            <input id="historyFiles" type="file" accept="application/json" multiple />
-          </label>
-          <label class="input-group">
-            <span>Optional artist genre map JSON</span>
-            <input id="genreFile" type="file" accept="application/json" />
-          </label>
-          <label class="input-group">
-            <span>Time range</span>
-            <select id="timeRange">
-              <option value="all">All time</option>
-              <option value="12m">Last 12 months</option>
-              <option value="year">Current year</option>
-              <option value="6m">Last 6 months</option>
-              <option value="3m">Last 3 months</option>
-              <option value="1m">Last 1 month</option>
-              <option value="1w">Last 1 week</option>
-              <option value="today">Today</option>
-            </select>
-          </label>
+        <div class="auth-tabs" role="tablist" aria-label="Tryb konta">
+          <button id="loginTabBtn" type="button" class="tab active" role="tab" aria-selected="true">Logowanie</button>
+          <button id="registerTabBtn" type="button" class="tab" role="tab" aria-selected="false">Rejestracja</button>
         </div>
-        <div class="actions">
-          <button id="loadDemoBtn" type="button">Load demo data</button>
-          <button id="clearDataBtn" type="button" class="ghost">Clear data</button>
-        </div>
-        <p id="status" class="status">No data loaded yet.</p>
+
+        <form id="loginForm" class="auth-form" autocomplete="on">
+          <label class="field">
+            <span>Nazwa użytkownika</span>
+            <input id="loginUsername" type="text" required minlength="3" maxlength="40" />
+          </label>
+          <label class="field">
+            <span>Hasło</span>
+            <input id="loginPassword" type="password" required minlength="6" maxlength="128" />
+          </label>
+          <button type="submit" class="primary">Zaloguj się</button>
+        </form>
+
+        <form id="registerForm" class="auth-form hidden" autocomplete="on">
+          <label class="field">
+            <span>Nazwa użytkownika</span>
+            <input id="registerUsername" type="text" required minlength="3" maxlength="40" />
+          </label>
+          <label class="field">
+            <span>Hasło</span>
+            <input id="registerPassword" type="password" required minlength="6" maxlength="128" />
+          </label>
+          <button type="submit" class="primary">Utwórz konto</button>
+        </form>
+
+        <p id="authStatus" class="status-line">Zaloguj się lub utwórz konto lokalne.</p>
       </section>
 
-      <section id="summary" class="panel hidden"></section>
+      <section id="dashboardScreen" class="hidden">
+        <header class="surface topbar">
+          <div>
+            <p class="eyebrow">Dashboard</p>
+            <h2>SpotiStats</h2>
+          </div>
+          <div class="topbar-actions">
+            <p id="sessionInfo" class="session-info"></p>
+            <button id="logoutBtn" type="button" class="ghost">Wyloguj</button>
+          </div>
+        </header>
 
-      <section id="tops" class="panel hidden grid-2"></section>
+        <section class="surface">
+          <h3>Źródło danych</h3>
+          <p class="muted">
+            Importuj pliki JSON lub ZIP od Spotify. Zapisane dane zostaną automatycznie
+            użyte przy kolejnym logowaniu.
+          </p>
+          <div class="form-grid">
+            <label class="field">
+              <span>Pliki historii Spotify (.json lub .zip)</span>
+              <input id="historyFiles" type="file" accept="application/json,.json,.zip,application/zip" multiple />
+            </label>
+            <label class="field">
+              <span>Opcjonalna mapa gatunków (JSON)</span>
+              <input id="genreFile" type="file" accept="application/json,.json" />
+            </label>
+            <label class="field">
+              <span>Zakres czasu</span>
+              <select id="timeRange">
+                <option value="all">All time</option>
+                <option value="12m">Last 12 months</option>
+                <option value="year">Current year</option>
+                <option value="6m">Last 6 months</option>
+                <option value="3m">Last 3 months</option>
+                <option value="1m">Last 1 month</option>
+                <option value="1w">Last 1 week</option>
+                <option value="today">Today</option>
+              </select>
+            </label>
+          </div>
+          <div class="actions-row">
+            <button id="importBtn" type="button" class="primary">Importuj / Reimportuj</button>
+            <button id="loadDemoBtn" type="button">Wczytaj demo</button>
+            <button id="clearDataBtn" type="button" class="ghost">Wyczyść lokalne dane</button>
+          </div>
+          <p id="status" class="status-line">Brak danych użytkownika.</p>
+          <div id="sourceInfo" class="source-grid"></div>
+        </section>
 
-      <section id="patterns" class="panel hidden grid-2"></section>
+        <section id="summary" class="surface hidden"></section>
+        <section id="tops" class="surface hidden grid-2"></section>
+        <section id="patterns" class="surface hidden grid-2"></section>
+      </section>
     </main>
 
     <script type="module" src="./app.js"></script>
