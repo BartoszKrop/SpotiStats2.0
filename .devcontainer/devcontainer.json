@@ -20,7 +20,7 @@
   },
   "updateContentCommand": "[ -f packages.txt ] && sudo apt update && sudo apt upgrade -y && sudo xargs apt install -y <packages.txt; [ -f requirements.txt ] && pip3 install --user -r requirements.txt; echo '✅ Packages installed and Requirements met'",
   "postAttachCommand": {
-    "server": "mkdir -p /tmp/spotistats-public && cp index.html app.js analytics.js styles.css /tmp/spotistats-public/ && python -m http.server 8501 --bind 0.0.0.0 --directory /tmp/spotistats-public"
+    "server": "rm -rf .devcontainer/preview-public && mkdir -p .devcontainer/preview-public && for f in *.html *.js *.css *.json *.svg *.png *.jpg *.jpeg *.ico; do [ -f \"$f\" ] && cp \"$f\" .devcontainer/preview-public/; done && python -m http.server 8501 --bind 0.0.0.0 --directory .devcontainer/preview-public"
   },
   "portsAttributes": {
     "8501": {
