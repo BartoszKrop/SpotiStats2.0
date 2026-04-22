@@ -3,6 +3,8 @@ import { buildStats, filterByRange, normalizeHistoryRowsWithReport, parseGenreMa
 const STORAGE_KEY = 'spotistats.local.store';
 const SESSION_KEY = 'spotistats.local.session';
 const STORAGE_VERSION = 1;
+const PASSWORD_MIN_LENGTH = 8;
+const PBKDF2_ITERATIONS = 720_000;
 const MIN_TOP_BAR_WIDTH_PERCENT = 4;
 const MIN_PATTERN_BAR_WIDTH_PERCENT = 2;
 
@@ -54,8 +56,6 @@ let sourceState = {
   fileErrors: 0,
   importedAt: null
 };
-let cachedZipModule = null;
-
 function escapeHtml(value) {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -86,13 +86,11 @@ function showDashboardStatus(message, isError = false) {
 }
 
 function toBase64(uint8Array) {
-  const chunkSize = 0x8000;
-  const chunks = [];
-  for (let i = 0; i < uint8Array.length; i += chunkSize) {
-    const slice = uint8Array.subarray(i, i + chunkSize);
-    chunks.push(String.fromCharCode(...slice));
+  let binary = '';
+  for (let i = 0; i < uint8Array.length; i += 1) {
+    binary += String.fromCharCode(uint8Array[i]);
   }
-  return btoa(chunks.join(''));
+  return btoa(binary);
 }
 
 function fromBase64(base64) {
@@ -106,10 +104,24 @@ function fromBase64(base64) {
 
 async function hashPassword(password, saltBase64) {
   const encoder = new TextEncoder();
-  const salt = fromBase64(saltBase64);
-  const data = new Uint8Array([...salt, ...encoder.encode(password)]);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return toBase64(new Uint8Array(digest));
+  const passwordKey = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(password),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits']
+  );
+  const derivedBits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: fromBase64(saltBase64),
+      iterations: PBKDF2_ITERATIONS,
+      hash: 'SHA-256'
+    },
+    passwordKey,
+    256
+  );
+  return toBase64(new Uint8Array(derivedBits));
 }
 
 function loadStore() {
@@ -248,11 +260,11 @@ function createDemoEntries() {
 
   for (let day = 0; day < 120; day += 1) {
     const sessions = (day % 3) + 1;
-    for (let session = 0; session < sessions; session += 1) {
-      const pick = artists[(day + session) % artists.length];
+    for (let sessionIndex = 0; sessionIndex < sessions; sessionIndex += 1) {
+      const pick = artists[(day + sessionIndex) % artists.length];
       const timestamp = new Date(
         now.getTime() - day * 24 * 60 * 60 * 1000 +
-          (8 + ((day + session) % 14)) * 60 * 60 * 1000
+          (8 + ((day + sessionIndex) % 14)) * 60 * 60 * 1000
       );
 
       demo.push({
@@ -260,7 +272,7 @@ function createDemoEntries() {
         artist: pick.artist,
         track: pick.track,
         album: pick.album,
-        msPlayed: 120_000 + ((day * 17 + session * 23) % 200_000)
+        msPlayed: 120_000 + ((day * 17 + sessionIndex * 23) % 200_000)
       });
     }
   }
@@ -424,44 +436,130 @@ async function loadJsonArrayFromFile(file) {
   try {
     const parsed = JSON.parse(await file.text());
     if (!Array.isArray(parsed)) {
-      return { rows: [], errors: [`${file.name}: root value must be an array`] };
+      return { rows: [], errors: [`${file.name}: wartość główna musi być tablicą`] };
     }
     return { rows: parsed, errors: [] };
   } catch {
-    return { rows: [], errors: [`${file.name}: invalid JSON`] };
+    return { rows: [], errors: [`${file.name}: niepoprawny JSON`] };
   }
 }
 
-async function getZipModule() {
-  if (cachedZipModule) return cachedZipModule;
-  cachedZipModule = await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm');
-  return cachedZipModule;
+function readUint16(view, offset) {
+  return view.getUint16(offset, true);
+}
+
+function readUint32(view, offset) {
+  return view.getUint32(offset, true);
+}
+
+function findEndOfCentralDirectory(view) {
+  const signature = 0x06054b50;
+  const maxCommentSize = 0xffff;
+  const start = Math.max(0, view.byteLength - (22 + maxCommentSize));
+
+  for (let offset = view.byteLength - 22; offset >= start; offset -= 1) {
+    if (readUint32(view, offset) === signature) {
+      return offset;
+    }
+  }
+
+  return -1;
+}
+
+async function inflateZipEntry(compressionMethod, compressedBytes) {
+  if (compressionMethod === 0) {
+    return compressedBytes;
+  }
+
+  if (compressionMethod !== 8) {
+    throw new Error(`Nieobsługiwana metoda kompresji ZIP: ${compressionMethod}`);
+  }
+
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error(
+      'Twoja przeglądarka nie obsługuje rozpakowywania ZIP. Użyj nowszej przeglądarki lub importuj JSON bez ZIP.'
+    );
+  }
+
+  try {
+    const stream = new Blob([compressedBytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    const inflatedBuffer = await new Response(stream).arrayBuffer();
+    return new Uint8Array(inflatedBuffer);
+  } catch {
+    throw new Error('Nie udało się zdekompresować wpisu ZIP. Archiwum może być uszkodzone.');
+  }
+}
+
+async function extractZipJsonEntries(fileBuffer) {
+  const view = new DataView(fileBuffer);
+  const bytes = new Uint8Array(fileBuffer);
+  const textDecoder = new TextDecoder();
+  const endOfCentralDirectory = findEndOfCentralDirectory(view);
+
+  if (endOfCentralDirectory < 0) {
+    throw new Error('ZIP end-of-central-directory record not found');
+  }
+
+  const totalEntries = readUint16(view, endOfCentralDirectory + 10);
+  const centralDirectoryOffset = readUint32(view, endOfCentralDirectory + 16);
+  const entries = [];
+  let pointer = centralDirectoryOffset;
+
+  for (let index = 0; index < totalEntries; index += 1) {
+    if (readUint32(view, pointer) !== 0x02014b50) {
+      throw new Error('Niepoprawny nagłówek katalogu centralnego ZIP');
+    }
+
+    const compressionMethod = readUint16(view, pointer + 10);
+    const compressedSize = readUint32(view, pointer + 20);
+    const fileNameLength = readUint16(view, pointer + 28);
+    const extraLength = readUint16(view, pointer + 30);
+    const fileCommentLength = readUint16(view, pointer + 32);
+    const localHeaderOffset = readUint32(view, pointer + 42);
+
+    const fileNameBytes = bytes.subarray(pointer + 46, pointer + 46 + fileNameLength);
+    const fileName = textDecoder.decode(fileNameBytes);
+
+    if (!fileName.endsWith('/')) {
+      if (readUint32(view, localHeaderOffset) !== 0x04034b50) {
+        throw new Error('Niepoprawny lokalny nagłówek pliku ZIP');
+      }
+
+      const localFileNameLength = readUint16(view, localHeaderOffset + 26);
+      const localExtraLength = readUint16(view, localHeaderOffset + 28);
+      const dataStart = localHeaderOffset + 30 + localFileNameLength + localExtraLength;
+      const compressedBytes = bytes.subarray(dataStart, dataStart + compressedSize);
+      const inflatedBytes = await inflateZipEntry(compressionMethod, compressedBytes);
+      entries.push({ fileName, text: textDecoder.decode(inflatedBytes) });
+    }
+
+    pointer += 46 + fileNameLength + extraLength + fileCommentLength;
+  }
+
+  return entries;
 }
 
 async function loadHistoryRowsFromZip(file) {
-  const zipModule = await getZipModule();
-  const zip = await zipModule.default.loadAsync(await file.arrayBuffer());
   const rows = [];
   const errors = [];
-  const jsonFiles = Object.values(zip.files).filter(
-    (entry) => !entry.dir && entry.name.toLowerCase().endsWith('.json')
-  );
+  const archiveEntries = await extractZipJsonEntries(await file.arrayBuffer());
+  const jsonEntries = archiveEntries.filter((entry) => entry.fileName.toLowerCase().endsWith('.json'));
 
-  if (jsonFiles.length === 0) {
-    errors.push(`${file.name}: archive does not contain JSON files`);
+  if (jsonEntries.length === 0) {
+    errors.push(`${file.name}: archiwum nie zawiera plików JSON`);
+    return { rows, errors };
   }
 
-  for (const entry of jsonFiles) {
+  for (const entry of jsonEntries) {
     try {
-      const text = await entry.async('string');
-      const parsed = JSON.parse(text);
+      const parsed = JSON.parse(entry.text);
       if (!Array.isArray(parsed)) {
-        errors.push(`${file.name}/${entry.name}: root value must be an array`);
+        errors.push(`${file.name}/${entry.fileName}: wartość główna musi być tablicą`);
         continue;
       }
       rows.push(...parsed);
     } catch {
-      errors.push(`${file.name}/${entry.name}: invalid JSON`);
+      errors.push(`${file.name}/${entry.fileName}: niepoprawny JSON`);
     }
   }
 
@@ -483,7 +581,7 @@ async function readHistoryInputs(fileList) {
         rows.push(...zipResult.rows);
         errors.push(...zipResult.errors);
       } catch {
-        errors.push(`${file.name}: invalid ZIP or unsupported archive`);
+        errors.push(`${file.name}: niepoprawny ZIP lub nieobsługiwane archiwum`);
       }
       continue;
     }
@@ -636,8 +734,8 @@ registerForm.addEventListener('submit', async (event) => {
   const username = normalizeUsername(registerUsername.value);
   const password = registerPassword.value;
 
-  if (username.length < 3 || password.length < 6) {
-    showAuthMessage('Nazwa min. 3 znaki, hasło min. 6 znaków.', true);
+  if (username.length < 3 || password.length < PASSWORD_MIN_LENGTH) {
+    showAuthMessage(`Nazwa min. 3 znaki, hasło min. ${PASSWORD_MIN_LENGTH} znaków.`, true);
     return;
   }
 
