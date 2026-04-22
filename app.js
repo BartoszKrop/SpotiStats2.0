@@ -2,7 +2,9 @@ import { buildStats, filterByRange, normalizeHistoryRowsWithReport, parseGenreMa
 
 const STORAGE_KEY = 'spotistats.local.store';
 const SESSION_KEY = 'spotistats.local.session';
+const BUILD_STORAGE_KEY = 'spotistats.local.build';
 const STORAGE_VERSION = 1;
+const APP_BUILD_VERSION = '2026.04.22.1';
 const PASSWORD_MIN_LENGTH = 8;
 const PBKDF2_ITERATIONS = 720_000;
 const MIN_TOP_BAR_WIDTH_PERCENT = 4;
@@ -41,6 +43,7 @@ const clearDataBtn = document.getElementById('clearDataBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const sessionInfo = document.getElementById('sessionInfo');
 const sourceInfoEl = document.getElementById('sourceInfo');
+const appVersionEl = document.getElementById('appVersion');
 
 let store = loadStore();
 let currentUser = null;
@@ -168,6 +171,32 @@ function clearSession() {
 
 function getSessionUser() {
   return localStorage.getItem(SESSION_KEY);
+}
+
+async function clearLegacyCacheAndServiceWorkers() {
+  try {
+    if (typeof caches !== 'undefined') {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+  } catch {}
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    }
+  } catch {}
+}
+
+function ensureLatestBuild() {
+  const previousBuild = localStorage.getItem(BUILD_STORAGE_KEY);
+  if (previousBuild === APP_BUILD_VERSION) {
+    return;
+  }
+
+  localStorage.setItem(BUILD_STORAGE_KEY, APP_BUILD_VERSION);
+  void clearLegacyCacheAndServiceWorkers();
 }
 
 function getCurrentUserRecord() {
@@ -770,6 +799,10 @@ rangeSelect.addEventListener('change', () => {
 });
 
 (function init() {
+  ensureLatestBuild();
+  if (appVersionEl) {
+    appVersionEl.textContent = `Build ${APP_BUILD_VERSION}`;
+  }
   renderSourceInfo();
   const persistedUser = getSessionUser();
   if (persistedUser && store.users[persistedUser]) {
