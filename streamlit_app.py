@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from typing import Any
 
@@ -106,8 +107,8 @@ with st.sidebar:
 
     st.divider()
     st.subheader("Spotify account (MVP)")
-    client_id = st.text_input("Spotify Client ID", value=st.secrets.get("SPOTIFY_CLIENT_ID", ""))
-    redirect_uri = st.text_input("Redirect URI", value=st.secrets.get("SPOTIFY_REDIRECT_URI", "http://localhost:8501"))
+    client_id = st.secrets.get("SPOTIFY_CLIENT_ID", os.getenv("SPOTIFY_CLIENT_ID", ""))
+    redirect_uri = st.secrets.get("SPOTIFY_REDIRECT_URI", os.getenv("SPOTIFY_REDIRECT_URI", "http://localhost:8501"))
     if "pkce" not in st.session_state:
         st.session_state.pkce = create_pkce_session()
 
@@ -121,6 +122,10 @@ with st.sidebar:
     if client_id and redirect_uri:
         auth_url = build_authorize_url(client_id, redirect_uri, scopes, st.session_state.pkce)
         st.link_button("Connect Spotify account", auth_url)
+    else:
+        st.info(
+            "OAuth app config is missing. Set SPOTIFY_CLIENT_ID and SPOTIFY_REDIRECT_URI once for this deployment."
+        )
 
     query_params = st.query_params
     auth_code = query_params.get("code")

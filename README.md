@@ -56,13 +56,15 @@ The Streamlit version includes:
 
 ### Spotify OAuth setup (optional)
 
-In your Spotify app dashboard, configure redirect URI (for local Streamlit typically `http://localhost:8501`), then pass values in UI fields or Streamlit secrets:
+In your Spotify app dashboard, configure redirect URI (for local Streamlit typically `http://localhost:8501`), then set these values once for the deployment (users only click **Connect Spotify account**; they do not need individual secrets):
 
 ```toml
 # .streamlit/secrets.toml
 SPOTIFY_CLIENT_ID = "your_client_id"
 SPOTIFY_REDIRECT_URI = "http://localhost:8501"
 ```
+
+You can also provide the same values as environment variables (`SPOTIFY_CLIENT_ID`, `SPOTIFY_REDIRECT_URI`).
 
 ## Genre map format (optional)
 
