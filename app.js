@@ -86,11 +86,13 @@ function showDashboardStatus(message, isError = false) {
 }
 
 function toBase64(uint8Array) {
-  let binary = '';
-  for (const value of uint8Array) {
-    binary += String.fromCharCode(value);
+  const chunkSize = 0x8000;
+  const chunks = [];
+  for (let i = 0; i < uint8Array.length; i += chunkSize) {
+    const slice = uint8Array.subarray(i, i + chunkSize);
+    chunks.push(String.fromCharCode(...slice));
   }
-  return btoa(binary);
+  return btoa(chunks.join(''));
 }
 
 function fromBase64(base64) {
