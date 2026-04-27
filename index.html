@@ -7,54 +7,145 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="app-shell">
-      <header class="hero">
-        <h1>SpotiStats 2.0</h1>
-        <p>
-          Upload your Spotify history export and explore top artists, tracks, albums,
-          genres, and listening patterns across multiple time ranges.
-        </p>
-      </header>
 
-      <section class="panel">
-        <h2>Data source</h2>
-        <div class="inputs">
-          <label class="input-group">
-            <span>Spotify streaming history JSON files</span>
-            <input id="historyFiles" type="file" accept="application/json" multiple />
-          </label>
-          <label class="input-group">
-            <span>Optional artist genre map JSON</span>
-            <input id="genreFile" type="file" accept="application/json" />
-          </label>
-          <label class="input-group">
-            <span>Time range</span>
-            <select id="timeRange">
-              <option value="all">All time</option>
-              <option value="12m">Last 12 months</option>
-              <option value="year">Current year</option>
-              <option value="6m">Last 6 months</option>
-              <option value="3m">Last 3 months</option>
-              <option value="1m">Last 1 month</option>
-              <option value="1w">Last 1 week</option>
-              <option value="today">Today</option>
-            </select>
-          </label>
+    <!-- ═══════════════════════════════════════════════════════ AUTH SCREEN -->
+    <div id="screen-auth" class="screen screen--auth">
+      <div class="auth-glow" aria-hidden="true"></div>
+      <div class="auth-card">
+        <div class="auth-logo">
+          <span class="logo-icon" aria-hidden="true">◎</span>
+          <span class="logo-text">SpotiStats</span>
+          <span class="logo-badge">2.0</span>
         </div>
-        <div class="actions">
-          <button id="loadDemoBtn" type="button">Load demo data</button>
-          <button id="clearDataBtn" type="button" class="ghost">Clear data</button>
+        <p class="auth-tagline">Your personal Spotify listening insights — private &amp; local.</p>
+
+        <div class="auth-tabs" role="tablist">
+          <button class="auth-tab auth-tab--active" data-tab="login" role="tab" aria-selected="true">Sign in</button>
+          <button class="auth-tab" data-tab="register" role="tab" aria-selected="false">Create account</button>
         </div>
-        <p id="status" class="status">No data loaded yet.</p>
-      </section>
 
-      <section id="summary" class="panel hidden"></section>
+        <!-- Login form -->
+        <form id="form-login" class="auth-form" novalidate>
+          <div class="field">
+            <label class="field-label" for="login-username">Username</label>
+            <input id="login-username" class="field-input" type="text" placeholder="your name"
+              autocomplete="username" autocapitalize="none" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="login-password">Password</label>
+            <input id="login-password" class="field-input" type="password" placeholder="••••••••"
+              autocomplete="current-password" />
+          </div>
+          <label class="field-check">
+            <input id="login-remember" type="checkbox" />
+            <span>Stay signed in</span>
+          </label>
+          <p id="login-error" class="auth-error hidden" role="alert"></p>
+          <button type="submit" class="btn btn--primary btn--full">Sign in</button>
+        </form>
 
-      <section id="tops" class="panel hidden grid-2"></section>
+        <!-- Register form -->
+        <form id="form-register" class="auth-form hidden" novalidate>
+          <div class="field">
+            <label class="field-label" for="reg-username">Username</label>
+            <input id="reg-username" class="field-input" type="text" placeholder="pick a name"
+              autocomplete="username" autocapitalize="none" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="reg-password">Password</label>
+            <input id="reg-password" class="field-input" type="password" placeholder="min 4 characters"
+              autocomplete="new-password" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="reg-password2">Confirm password</label>
+            <input id="reg-password2" class="field-input" type="password" placeholder="repeat password"
+              autocomplete="new-password" />
+          </div>
+          <p id="reg-error" class="auth-error hidden" role="alert"></p>
+          <button type="submit" class="btn btn--primary btn--full">Create account</button>
+        </form>
 
-      <section id="patterns" class="panel hidden grid-2"></section>
-    </main>
+        <p class="auth-note">All data is stored locally in your browser. Nothing is sent to any server.</p>
+      </div>
+    </div>
 
+    <!-- ════════════════════════════════════════════════════════ APP SCREEN -->
+    <div id="screen-app" class="screen screen--app hidden">
+
+      <!-- Top navigation bar -->
+      <nav class="topbar" aria-label="Main navigation">
+        <div class="topbar-brand">
+          <span class="logo-icon" aria-hidden="true">◎</span>
+          <span class="logo-text">SpotiStats</span>
+        </div>
+        <div class="topbar-right">
+          <span id="topbar-username" class="topbar-user" aria-label="Signed in as"></span>
+          <button id="btn-logout" class="btn btn--ghost btn--sm">Sign out</button>
+        </div>
+      </nav>
+
+      <!-- ─── EMPTY / IMPORT STATE ──────────────────────────── -->
+      <div id="state-empty" class="state-empty">
+        <div class="import-hero">
+          <div class="import-hero__icon" aria-hidden="true">🎵</div>
+          <h1 class="import-hero__title">Import your Spotify data</h1>
+          <p class="import-hero__desc">
+            Request your data in <strong>Spotify → Settings → Privacy → Download your data</strong>.
+            Spotify will email you a <strong>.zip</strong> file — upload it directly below, or drop individual JSON history files.
+          </p>
+
+          <label class="drop-zone" id="drop-zone" for="import-files" tabindex="0"
+            role="button" aria-label="Upload Spotify data — drop file or click to browse">
+            <input id="import-files" type="file" accept=".zip,application/json" multiple class="sr-only" />
+            <span class="drop-zone__icon" aria-hidden="true">⬆</span>
+            <span class="drop-zone__title">Drop file or click to browse</span>
+            <span class="drop-zone__hint">Accepts .zip or multiple .json files</span>
+          </label>
+
+          <p id="import-status" class="import-status" role="status" aria-live="polite"></p>
+
+          <button id="btn-load-demo" class="btn btn--ghost btn--sm demo-btn">Load demo data</button>
+        </div>
+      </div>
+
+      <!-- ─── DASHBOARD STATE ───────────────────────────────── -->
+      <div id="state-data" class="state-data hidden">
+
+        <!-- Toolbar: range pills + actions -->
+        <div class="dashboard-toolbar">
+          <div class="range-pills" id="range-pills" role="group" aria-label="Time range">
+            <button class="pill pill--active" data-range="all">All time</button>
+            <button class="pill" data-range="12m">12 months</button>
+            <button class="pill" data-range="year">This year</button>
+            <button class="pill" data-range="6m">6 months</button>
+            <button class="pill" data-range="3m">3 months</button>
+            <button class="pill" data-range="1m">1 month</button>
+            <button class="pill" data-range="1w">1 week</button>
+            <button class="pill" data-range="today">Today</button>
+          </div>
+          <div class="toolbar-actions">
+            <span id="data-info" class="data-info" aria-live="polite"></span>
+            <label class="btn btn--ghost btn--sm" for="reimport-files" title="Re-import data">
+              ↺ Reimport
+              <input id="reimport-files" type="file" accept=".zip,application/json" multiple class="sr-only" />
+            </label>
+            <button id="btn-clear-data" class="btn btn--ghost btn--sm btn--danger">✕ Clear data</button>
+          </div>
+        </div>
+
+        <!-- KPI cards -->
+        <div id="kpi-row" class="kpi-row" aria-label="Summary statistics"></div>
+
+        <!-- Top lists -->
+        <div id="tops-grid" class="tops-grid"></div>
+
+        <!-- Activity patterns -->
+        <div id="patterns-grid" class="patterns-grid"></div>
+
+      </div><!-- /state-data -->
+    </div><!-- /screen-app -->
+
+    <script src="./jszip.min.js"></script>
     <script type="module" src="./app.js"></script>
   </body>
 </html>

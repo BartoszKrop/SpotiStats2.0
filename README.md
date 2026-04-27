@@ -1,103 +1,88 @@
-# SpotiStats2.0
+# SpotiStats 2.0
 
-SpotiStats 2.0 is a lightweight self-hosted stats.fm-style dashboard for Spotify history exports.
+SpotiStats 2.0 is a privacy-first, browser-based Spotify listening history dashboard.
+All data stays on your device — no server, no account required beyond a local profile.
 
 ## Features
 
-- Import one or many Spotify JSON listening history files
-- Optional genre enrichment through an artist→genres JSON map
-- Time ranges:
-  - all time
-  - last 12 months
-  - current year
-  - last 6 months
-  - last 3 months
-  - last month
-  - last week
-  - today
-- Top lists for:
-  - artists
-  - songs
-  - albums
-  - genres
-- Listening insights:
-  - total plays and total listening time
-  - average daily listening time
-  - listening distribution by weekday
-  - listening distribution by hour
+- **Local accounts** — create a profile with a username and password; data is stored only in your browser
+- **Session persistence** — optional "Stay signed in" keeps you logged in across browser restarts
+- **ZIP import** — upload the `.zip` file Spotify emails you directly; all JSON files inside are extracted automatically
+- **JSON import** — also accepts individual Spotify history JSON files (drag-and-drop or file picker)
+- **Persistent data** — imported history is saved to IndexedDB so you don't re-upload every visit
+- **Reimport / Clear** — update your data or wipe it entirely from the dashboard toolbar
+- **Time ranges** — All time · 12 months · This year · 6 months · 3 months · 1 month · 1 week · Today
+- **Top lists** — artists, tracks, albums, genres (with listening hours + play counts)
+- **Activity patterns** — bar charts by weekday and hour of day
+- **Demo mode** — load sample data without uploading any files
 
-## Run locally
+## How to run
 
-Open `index.html` in a browser.
+Open `index.html` in any modern browser (Chrome, Edge, Safari, Firefox).
+No build step, no server, no dependencies to install.
 
-### Streamlit MVP (test mode)
+> **Note:** The SHA-256 password hashing requires the Web Crypto API.
+> Chrome, Edge, and Safari support this on `file://` URLs.
+> Firefox users may need to serve the app via a local server:
+> ```bash
+> python -m http.server 8080
+> # then open http://localhost:8080
+> ```
 
-Install dependencies:
+## Importing your Spotify data
 
-```bash
-pip install -r requirements-streamlit.txt
-```
+1. In Spotify, go to **Settings → Privacy → Download your data**.
+2. Request an account data export (Spotify emails you a link within a few days).
+3. Download the `.zip` file from the email link.
+4. In SpotiStats, sign in and click **Drop file or click to browse** — select the `.zip` directly.
+   SpotiStats reads every JSON file inside the archive automatically (including multi-year exports).
 
-Run:
+You can also drag-and-drop the `.zip` onto the upload zone.
 
-```bash
-streamlit run streamlit_app.py
-```
+## Local auth details
 
-The Streamlit version includes:
+- Usernames and hashed passwords are stored in `localStorage` under the key `ss_users`.
+- Passwords are hashed with SHA-256 (salted with the username) before storage.
+- Listening history is stored in IndexedDB (`SpotiStats` database, `userData` store).
+- Nothing is transmitted outside your browser.
 
-- upload of multiple Spotify history JSON files
-- optional genres map import
-- ranges: all-time, 4 weeks, 12 months, last year, YTD, 6m, 3m, 1m, 1w, today, custom range
-- top artists / tracks / albums / genres
-- daily trend chart + weekday/hour activity charts
-- history timeline with artist/album/track filters
-- Spotify OAuth PKCE connection MVP (`spotify_oauth.py`)
+## Data format
 
-### Spotify OAuth setup (optional)
+SpotiStats accepts the Spotify Extended Streaming History JSON schema
+(`ts`, `master_metadata_album_artist_name`, `master_metadata_track_name`, etc.)
+as well as the older short-history format (`endTime`, `artistName`, `trackName`, `msPlayed`).
 
-In your Spotify app dashboard, configure redirect URI (for local Streamlit typically `http://localhost:8501`), then set these values once for the deployment (users only click **Connect Spotify account**; they do not need individual secrets):
+## Genre map (optional)
 
-```toml
-# .streamlit/secrets.toml
-SPOTIFY_CLIENT_ID = "your_client_id"
-SPOTIFY_REDIRECT_URI = "http://localhost:8501"
-```
-
-You can also provide the same values as environment variables (`SPOTIFY_CLIENT_ID`, `SPOTIFY_REDIRECT_URI`).
-
-## Genre map format (optional)
-
-You can provide a second JSON file in one of these formats:
+You can enrich genre data by uploading a JSON map alongside your history files:
 
 ```json
-{
-  "Artist Name": ["pop", "dance"]
-}
+{ "Artist Name": ["genre1", "genre2"] }
 ```
 
-or
+or the array format:
 
 ```json
-[
-  { "artist": "Artist Name", "genres": ["pop", "dance"] }
-]
+[{ "artist": "Artist Name", "genres": ["genre1", "genre2"] }]
 ```
 
 ## Tests
 
-Run:
+Run the analytics unit tests (Node.js 18+):
 
 ```bash
 node --test analytics.test.js
 ```
 
-## Product roadmap and parity checklist
+## Architecture notes
 
-See `/docs/statsfm-feature-parity.md` for the current stats.fm-inspired feature matrix and implementation status.
+| Layer        | Technology                                             |
+|--------------|--------------------------------------------------------|
+| UI / App     | Vanilla HTML + CSS + ES modules (no framework)         |
+| Analytics    | `analytics.js` — pure functions, fully unit-tested     |
+| Auth store   | `localStorage`                                         |
+| Data store   | IndexedDB (handles large history exports)              |
+| ZIP parsing  | `jszip.min.js` (bundled locally, no CDN required)      |
 
-## Suggested long-term architectures
+For production / multi-user scenarios see suggested architectures in `/docs/statsfm-feature-parity.md`.
 
-- **FastAPI + Next.js** for production-grade multi-user app
-- **Supabase + Next.js** for rapid cloud deployment with auth and storage
-- **Tauri/Electron** for privacy-first local desktop analytics
