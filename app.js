@@ -31,7 +31,9 @@ const MIN_BAR_PCT    = 3;               // minimum bar width %
 // CRYPTO — SHA-256 via SubtleCrypto; fallback for file:// on Firefox
 // ──────────────────────────────────────────────────────────────
 async function hashPassword(raw) {
-  if (typeof crypto !== 'undefined' && crypto.subtle) {
+  // crypto.subtle is available in all modern browsers; falls back only when
+  // SubtleCrypto is blocked (e.g. Firefox on file:// without a local server).
+  if (crypto.subtle) {
     const buf = await crypto.subtle.digest(
       'SHA-256',
       new TextEncoder().encode(raw)
@@ -40,7 +42,10 @@ async function hashPassword(raw) {
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
   }
-  // Simple fallback (local-only auth — not security-critical)
+  // Fallback: two-lane FNV-1a (32-bit) for local-only user separation when
+  // SubtleCrypto is unavailable.  Not cryptographically strong — serve via
+  // localhost so SubtleCrypto is always available for stronger hashing.
+  // FNV-1a 32-bit offset basis / second-lane seed:
   let h1 = 0x811c9dc5 >>> 0;
   let h2 = 0xc4ceb9fe >>> 0;
   for (let i = 0; i < raw.length; i++) {
@@ -67,7 +72,7 @@ async function registerUser(username, password) {
   if (!key)          return { ok: false, error: 'Username is required.' };
   if (key.length < 2) return { ok: false, error: 'Username must be at least 2 characters.' };
   if (!password)     return { ok: false, error: 'Password is required.' };
-  if (password.length < 4) return { ok: false, error: 'Password must be at least 4 characters.' };
+  if (password.length < 8) return { ok: false, error: 'Password must be at least 8 characters.' };
 
   const users = getUsers();
   if (users[key])    return { ok: false, error: 'That username is already taken.' };
