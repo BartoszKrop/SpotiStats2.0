@@ -1,816 +1,604 @@
-import { buildStats, filterByRange, normalizeHistoryRowsWithReport, parseGenreMap } from './analytics.js';
+/**
+ * SpotiStats 2.0 — App logic
+ *
+ * Responsibilities:
+ *   • Local auth  — username + hashed password stored in localStorage
+ *   • Session     — sessionStorage (+ optional localStorage "remember me")
+ *   • Data store  — IndexedDB (listening entries persist between sessions)
+ *   • ZIP import  — JSZip library reads Spotify data packages
+ *   • Dashboard   — renders stats returned by analytics.js
+ */
 
-const STORAGE_KEY = 'spotistats.local.store';
-const SESSION_KEY = 'spotistats.local.session';
-const BUILD_STORAGE_KEY = 'spotistats.local.build';
-const STORAGE_VERSION = 1;
-const APP_BUILD_VERSION = '2026.04.22.1';
-const PASSWORD_MIN_LENGTH = 8;
-const PBKDF2_ITERATIONS = 720_000;
-const MIN_TOP_BAR_WIDTH_PERCENT = 4;
-const MIN_PATTERN_BAR_WIDTH_PERCENT = 2;
+import {
+  buildStats,
+  filterByRange,
+  normalizeHistoryRowsWithReport,
+  parseGenreMap
+} from './analytics.js';
 
-const DEMO_GENRE_MAP_OBJECT = {
-  'Daft Punk': ['electronic', 'french house'],
-  'The Weeknd': ['r&b', 'pop'],
-  'Tame Impala': ['psychedelic rock', 'indie'],
-  'Dua Lipa': ['pop', 'dance pop'],
-  'Arctic Monkeys': ['indie rock', 'alternative']
-};
+// ──────────────────────────────────────────────────────────────
+// CONSTANTS
+// ──────────────────────────────────────────────────────────────
+const USERS_KEY      = 'ss_users';       // localStorage: user registry
+const SESSION_KEY    = 'ss_session';     // sessionStorage: active user
+const REMEMBER_KEY   = 'ss_remember';   // localStorage: remembered user
+const IDB_NAME       = 'SpotiStats';
+const IDB_VERSION    = 1;
+const IDB_STORE      = 'userData';
+const MIN_BAR_PCT    = 3;               // minimum bar width %
 
-const authScreen = document.getElementById('authScreen');
-const dashboardScreen = document.getElementById('dashboardScreen');
-const loginTabBtn = document.getElementById('loginTabBtn');
-const registerTabBtn = document.getElementById('registerTabBtn');
-const loginForm = document.getElementById('loginForm');
-const registerForm = document.getElementById('registerForm');
-const loginUsername = document.getElementById('loginUsername');
-const loginPassword = document.getElementById('loginPassword');
-const registerUsername = document.getElementById('registerUsername');
-const registerPassword = document.getElementById('registerPassword');
-const authStatus = document.getElementById('authStatus');
-
-const historyInput = document.getElementById('historyFiles');
-const genreInput = document.getElementById('genreFile');
-const importBtn = document.getElementById('importBtn');
-const rangeSelect = document.getElementById('timeRange');
-const status = document.getElementById('status');
-const summaryEl = document.getElementById('summary');
-const topsEl = document.getElementById('tops');
-const patternsEl = document.getElementById('patterns');
-const loadDemoBtn = document.getElementById('loadDemoBtn');
-const clearDataBtn = document.getElementById('clearDataBtn');
-const logoutBtn = document.getElementById('logoutBtn');
-const sessionInfo = document.getElementById('sessionInfo');
-const sourceInfoEl = document.getElementById('sourceInfo');
-const appVersionEl = document.getElementById('appVersion');
-
-let store = loadStore();
-let currentUser = null;
-let entries = [];
-let genreMap = new Map();
-let rangeCache = new Map();
-let sourceState = {
-  mode: 'none',
-  files: [],
-  totalRows: 0,
-  loadedRows: 0,
-  invalidRows: 0,
-  fileErrors: 0,
-  importedAt: null
-};
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-function normalizeUsername(username) {
-  return username.trim().toLowerCase();
-}
-
-function hideResults() {
-  summaryEl.classList.add('hidden');
-  topsEl.classList.add('hidden');
-  patternsEl.classList.add('hidden');
-}
-
-function showAuthMessage(message, isError = false) {
-  authStatus.textContent = message;
-  authStatus.style.color = isError ? 'var(--danger)' : 'var(--accent-2)';
-}
-
-function showDashboardStatus(message, isError = false) {
-  status.textContent = message;
-  status.style.color = isError ? 'var(--danger)' : 'var(--accent-2)';
-}
-
-function toBase64(uint8Array) {
-  let binary = '';
-  for (let i = 0; i < uint8Array.length; i += 1) {
-    binary += String.fromCharCode(uint8Array[i]);
+// ──────────────────────────────────────────────────────────────
+// CRYPTO — SHA-256 via SubtleCrypto; fallback for file:// on Firefox
+// ──────────────────────────────────────────────────────────────
+async function hashPassword(raw) {
+  // crypto.subtle is available in all modern browsers; falls back only when
+  // SubtleCrypto is blocked (e.g. Firefox on file:// without a local server).
+  if (crypto.subtle) {
+    const buf = await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(raw)
+    );
+    return [...new Uint8Array(buf)]
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
   }
-  return btoa(binary);
-}
-
-function fromBase64(base64) {
-  const binary = atob(base64);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    out[i] = binary.charCodeAt(i);
+  // Fallback: two-lane FNV-1a (32-bit) for local-only user separation when
+  // SubtleCrypto is unavailable.  Not cryptographically strong — serve via
+  // localhost so SubtleCrypto is always available for stronger hashing.
+  // FNV-1a 32-bit offset basis / second-lane seed:
+  let h1 = 0x811c9dc5 >>> 0;
+  let h2 = 0xc4ceb9fe >>> 0;
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw.charCodeAt(i);
+    h1 = (Math.imul(h1 ^ c, 0x01000193)) >>> 0;
+    h2 = (Math.imul(h2 ^ c, 0x01000193)) >>> 0;
   }
-  return out;
+  return 'fb_' + h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
 }
 
-async function hashPassword(password, saltBase64) {
-  const encoder = new TextEncoder();
-  const passwordKey = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(password),
-    { name: 'PBKDF2' },
-    false,
-    ['deriveBits']
+// ──────────────────────────────────────────────────────────────
+// AUTH
+// ──────────────────────────────────────────────────────────────
+function getUsers() {
+  try { return JSON.parse(localStorage.getItem(USERS_KEY) || '{}'); }
+  catch { return {}; }
+}
+function saveUsers(users) {
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+}
+
+async function registerUser(username, password) {
+  const key = username.trim().toLowerCase();
+  if (!key)          return { ok: false, error: 'Username is required.' };
+  if (key.length < 2) return { ok: false, error: 'Username must be at least 2 characters.' };
+  if (!password)     return { ok: false, error: 'Password is required.' };
+  if (password.length < 8) return { ok: false, error: 'Password must be at least 8 characters.' };
+
+  const users = getUsers();
+  if (users[key])    return { ok: false, error: 'That username is already taken.' };
+
+  const hash = await hashPassword(key + ':' + password);
+  users[key] = { hash, displayName: username.trim(), createdAt: Date.now() };
+  saveUsers(users);
+  return { ok: true, username: key };
+}
+
+async function loginUser(username, password) {
+  const key  = username.trim().toLowerCase();
+  const users = getUsers();
+  const user  = users[key];
+  if (!user) return { ok: false, error: 'Unknown username.' };
+  const hash = await hashPassword(key + ':' + password);
+  if (hash !== user.hash) return { ok: false, error: 'Wrong password.' };
+  return { ok: true, username: key, displayName: user.displayName };
+}
+
+function getSession() {
+  return (
+    sessionStorage.getItem(SESSION_KEY) ||
+    localStorage.getItem(REMEMBER_KEY)  ||
+    null
   );
-  const derivedBits = await crypto.subtle.deriveBits(
-    {
-      name: 'PBKDF2',
-      salt: fromBase64(saltBase64),
-      iterations: PBKDF2_ITERATIONS,
-      hash: 'SHA-256'
-    },
-    passwordKey,
-    256
-  );
-  return toBase64(new Uint8Array(derivedBits));
 }
 
-function loadStore() {
-  const fallback = { version: STORAGE_VERSION, users: {} };
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return fallback;
-
-  try {
-    const parsed = JSON.parse(raw);
-    return migrateStore(parsed);
-  } catch {
-    return fallback;
-  }
-}
-
-function migrateStore(parsed) {
-  if (!parsed || typeof parsed !== 'object') {
-    return { version: STORAGE_VERSION, users: {} };
-  }
-
-  if (parsed.version === STORAGE_VERSION && parsed.users && typeof parsed.users === 'object') {
-    return parsed;
-  }
-
-  const users = parsed.users && typeof parsed.users === 'object' ? parsed.users : {};
-
-  return {
-    version: STORAGE_VERSION,
-    users
-  };
-}
-
-function persistStore() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
-}
-
-function setSession(username) {
-  localStorage.setItem(SESSION_KEY, username);
+function setSession(username, remember) {
+  sessionStorage.setItem(SESSION_KEY, username);
+  if (remember) localStorage.setItem(REMEMBER_KEY, username);
 }
 
 function clearSession() {
-  localStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(REMEMBER_KEY);
 }
 
-function getSessionUser() {
-  return localStorage.getItem(SESSION_KEY);
+// ──────────────────────────────────────────────────────────────
+// INDEXEDDB STORAGE
+// ──────────────────────────────────────────────────────────────
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE, { keyPath: 'username' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
 }
 
-async function clearLegacyCacheAndServiceWorkers() {
-  try {
-    if (typeof caches !== 'undefined') {
-      const keys = await caches.keys();
-      await Promise.all(keys.map((key) => caches.delete(key)));
-    }
-  } catch {}
-
-  try {
-    if ('serviceWorker' in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(registrations.map((registration) => registration.unregister()));
-    }
-  } catch {}
+async function saveUserData(username, payload) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(IDB_STORE, 'readwrite');
+    const rec = { username, ...payload, savedAt: Date.now() };
+    tx.objectStore(IDB_STORE).put(rec);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
 }
 
-function ensureLatestBuild() {
-  const previousBuild = localStorage.getItem(BUILD_STORAGE_KEY);
-  if (previousBuild === APP_BUILD_VERSION) {
-    return;
-  }
-
-  localStorage.setItem(BUILD_STORAGE_KEY, APP_BUILD_VERSION);
-  void clearLegacyCacheAndServiceWorkers();
+async function loadUserData(username) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(username);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror   = () => reject(req.error);
+  });
 }
 
-function getCurrentUserRecord() {
-  return currentUser ? store.users[currentUser] : null;
+async function clearUserData(username) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).delete(username);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
 }
 
-function ensureUserData(record) {
-  if (!record.data || typeof record.data !== 'object') {
-    record.data = { historyRows: [], genreRaw: null, sourceState: null };
-  }
+// ──────────────────────────────────────────────────────────────
+// FILE IMPORT — handles .zip and .json
+// ──────────────────────────────────────────────────────────────
+async function importFiles(fileList) {
+  const files     = [...fileList];
+  const rawRows   = [];
+  const fileErrors = [];
 
-  if (!Array.isArray(record.data.historyRows)) {
-    record.data.historyRows = [];
-  }
+  for (const file of files) {
+    const ext = file.name.split('.').pop().toLowerCase();
 
-  if (!record.settings || typeof record.settings !== 'object') {
-    record.settings = { timeRange: 'all' };
-  }
-
-  if (!record.settings.timeRange) {
-    record.settings.timeRange = 'all';
-  }
-}
-
-function switchAuthTab(tab) {
-  const isLogin = tab === 'login';
-  loginTabBtn.classList.toggle('active', isLogin);
-  registerTabBtn.classList.toggle('active', !isLogin);
-  loginTabBtn.setAttribute('aria-selected', String(isLogin));
-  registerTabBtn.setAttribute('aria-selected', String(!isLogin));
-  loginForm.classList.toggle('hidden', !isLogin);
-  registerForm.classList.toggle('hidden', isLogin);
-}
-
-function showAuthScreen() {
-  authScreen.classList.remove('hidden');
-  dashboardScreen.classList.add('hidden');
-}
-
-function showDashboardScreen() {
-  authScreen.classList.add('hidden');
-  dashboardScreen.classList.remove('hidden');
-}
-
-function list(items) {
-  if (!items.length) return '<p>Brak danych w tym zakresie.</p>';
-  const maxHours = Math.max(...items.map((item) => item.hours), 0);
-  return `<ol class="bar-list">${items
-    .map((item) => {
-      const width =
-        maxHours > 0 ? Math.max((item.hours / maxHours) * 100, MIN_TOP_BAR_WIDTH_PERCENT) : 0;
-      return `<li class="bar-row">
-          <div class="bar-label">${escapeHtml(item.label)}</div>
-          <div class="bar-track"><span class="bar-fill" style="width:${width}%"></span></div>
-          <div class="bar-meta">${item.hours}h · ${item.plays} odtworzeń</div>
-        </li>`;
-    })
-    .join('')}</ol>`;
-}
-
-function patternList(rows, labelBuilder) {
-  if (!rows.length) return '<p>Brak danych w tym zakresie.</p>';
-  const maxHours = Math.max(...rows.map((row) => row.hours), 0);
-  return `<ul class="bar-list">${rows
-    .map((row) => {
-      const width =
-        maxHours > 0
-          ? Math.max((row.hours / maxHours) * 100, MIN_PATTERN_BAR_WIDTH_PERCENT)
-          : 0;
-      return `<li class="bar-row">
-        <div class="bar-label">${escapeHtml(labelBuilder(row))}</div>
-        <div class="bar-track"><span class="bar-fill" style="width:${width}%"></span></div>
-        <div class="bar-meta">${row.hours}h</div>
-      </li>`;
-    })
-    .join('')}</ul>`;
-}
-
-function createDemoEntries() {
-  const artists = [
-    { artist: 'Daft Punk', track: 'Get Lucky', album: 'Random Access Memories' },
-    { artist: 'The Weeknd', track: 'Blinding Lights', album: 'After Hours' },
-    { artist: 'Tame Impala', track: 'The Less I Know The Better', album: 'Currents' },
-    { artist: 'Dua Lipa', track: 'Levitating', album: 'Future Nostalgia' },
-    { artist: 'Arctic Monkeys', track: 'Do I Wanna Know?', album: 'AM' }
-  ];
-
-  const now = new Date();
-  const demo = [];
-
-  for (let day = 0; day < 120; day += 1) {
-    const sessions = (day % 3) + 1;
-    for (let sessionIndex = 0; sessionIndex < sessions; sessionIndex += 1) {
-      const pick = artists[(day + sessionIndex) % artists.length];
-      const timestamp = new Date(
-        now.getTime() - day * 24 * 60 * 60 * 1000 +
-          (8 + ((day + sessionIndex) % 14)) * 60 * 60 * 1000
-      );
-
-      demo.push({
-        timestamp: timestamp.toISOString(),
-        artist: pick.artist,
-        track: pick.track,
-        album: pick.album,
-        msPlayed: 120_000 + ((day * 17 + sessionIndex * 23) % 200_000)
-      });
+    if (ext === 'zip') {
+      if (typeof JSZip === 'undefined') {
+        fileErrors.push(`${file.name}: ZIP support unavailable (jszip.min.js not loaded)`);
+        continue;
+      }
+      try {
+        const zip      = await JSZip.loadAsync(file);
+        const jsonFiles = Object.values(zip.files).filter(
+          f => !f.dir && f.name.toLowerCase().endsWith('.json')
+        );
+        for (const zf of jsonFiles) {
+          try {
+            const text   = await zf.async('text');
+            const parsed = JSON.parse(text);
+            if (Array.isArray(parsed)) rawRows.push(...parsed);
+            else fileErrors.push(`${zf.name}: root value must be an array`);
+          } catch {
+            fileErrors.push(`${zf.name}: invalid JSON`);
+          }
+        }
+      } catch {
+        fileErrors.push(`${file.name}: could not read ZIP archive`);
+      }
+    } else {
+      try {
+        const text   = await file.text();
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) rawRows.push(...parsed);
+        else fileErrors.push(`${file.name}: root value must be an array`);
+      } catch {
+        fileErrors.push(`${file.name}: invalid JSON`);
+      }
     }
   }
 
-  return demo;
-}
-
-function renderSourceInfo() {
-  const sourceLabelMap = {
-    none: 'Brak danych',
-    local: 'Lokalny zapis',
-    import: 'Import ręczny',
-    demo: 'Dane demo'
+  const report = normalizeHistoryRowsWithReport(rawRows);
+  return {
+    rows:       report.rows,
+    invalidRows: report.invalidRows,
+    totalRows:  report.totalRows,
+    fileErrors
   };
-
-  const importedAtText = sourceState.importedAt
-    ? new Date(sourceState.importedAt).toLocaleString()
-    : '—';
-
-  sourceInfoEl.innerHTML = `
-    <article class="data-pill"><span>Źródło</span><strong>${escapeHtml(sourceLabelMap[sourceState.mode] || sourceState.mode)}</strong></article>
-    <article class="data-pill"><span>Rekordy po normalizacji</span><strong>${sourceState.loadedRows}</strong></article>
-    <article class="data-pill"><span>Wiersze wejściowe</span><strong>${sourceState.totalRows}</strong></article>
-    <article class="data-pill"><span>Pominięte wpisy</span><strong>${sourceState.invalidRows}</strong></article>
-    <article class="data-pill"><span>Błędy plików/parsingu</span><strong>${sourceState.fileErrors}</strong></article>
-    <article class="data-pill"><span>Ostatni import</span><strong>${escapeHtml(importedAtText)}</strong></article>
-  `;
 }
 
-function render() {
-  const selectedRange = rangeSelect.value;
-  if (!rangeCache.has(selectedRange)) {
-    const filtered = filterByRange(entries, selectedRange);
-    rangeCache.set(selectedRange, buildStats(filtered, genreMap));
+// ──────────────────────────────────────────────────────────────
+// RENDER HELPERS
+// ──────────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str)
+    .replace(/&/g,  '&amp;')
+    .replace(/</g,  '&lt;')
+    .replace(/>/g,  '&gt;')
+    .replace(/"/g,  '&quot;')
+    .replace(/'/g,  '&#39;');
+}
+
+function renderBarList(items) {
+  if (!items.length) return '<p class="no-data">No data in this range.</p>';
+  const maxH = Math.max(...items.map(i => i.hours), 0);
+  return `<ul class="bar-list">${items.map((item, idx) => {
+    const pct = maxH > 0 ? Math.max((item.hours / maxH) * 100, MIN_BAR_PCT) : 0;
+    return `
+      <li class="bar-item">
+        <div class="bar-top">
+          <span class="bar-rank">${idx + 1}</span>
+          <span class="bar-name" title="${esc(item.label)}">${esc(item.label)}</span>
+          <span class="bar-meta">${item.hours}h · ${item.plays}</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:${pct}%"></div>
+        </div>
+      </li>`;
+  }).join('')}</ul>`;
+}
+
+function renderPatternChart(rows, labelFn) {
+  if (!rows.length) return '<p class="no-data">No data.</p>';
+  const maxH = Math.max(...rows.map(r => r.hours), 0.001);
+  return `<div class="pattern-chart">${rows.map(row => {
+    const pct   = Math.max((row.hours / maxH) * 90, row.hours > 0 ? 4 : 0);
+    const label = labelFn(row);
+    return `
+      <div class="pattern-col" title="${esc(label)}: ${row.hours}h">
+        <div class="pattern-bar" style="height:${pct}%"></div>
+        <div class="pattern-lbl">${esc(label)}</div>
+      </div>`;
+  }).join('')}</div>`;
+}
+
+// ──────────────────────────────────────────────────────────────
+// APP STATE
+// ──────────────────────────────────────────────────────────────
+let currentUser  = null;          // { username, displayName }
+let entries      = [];            // normalised history rows
+let genreMap     = new Map();
+let rangeCache   = new Map();
+let currentRange = 'all';
+let dataInfo     = '';
+
+// ──────────────────────────────────────────────────────────────
+// DASHBOARD RENDER
+// ──────────────────────────────────────────────────────────────
+const WEEKDAY_SHORT = {
+  Sunday:    'Sun', Monday:  'Mon', Tuesday: 'Tue', Wednesday: 'Wed',
+  Thursday:  'Thu', Friday: 'Fri', Saturday: 'Sat'
+};
+
+function getStats() {
+  if (!rangeCache.has(currentRange)) {
+    rangeCache.set(
+      currentRange,
+      buildStats(filterByRange(entries, currentRange), genreMap)
+    );
   }
+  return rangeCache.get(currentRange);
+}
 
-  const stats = rangeCache.get(selectedRange);
+function renderDashboard() {
+  const s = getStats();
 
-  summaryEl.innerHTML = `
-    <h3>Podsumowanie (${escapeHtml(selectedRange)})</h3>
-    <div class="kpi-grid">
-      <article class="kpi"><span>Łączne odtworzenia</span><strong>${stats.summary.totalPlays}</strong></article>
-      <article class="kpi"><span>Łączny czas słuchania</span><strong>${stats.summary.totalHours}h</strong></article>
-      <article class="kpi"><span>Średnio dziennie</span><strong>${stats.summary.avgDailyMinutes} min</strong></article>
+  // KPI
+  document.getElementById('kpi-row').innerHTML = `
+    <div class="kpi-card">
+      <div class="kpi-label">Total plays</div>
+      <div class="kpi-value">${s.summary.totalPlays.toLocaleString()}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Hours listened</div>
+      <div class="kpi-value">${s.summary.totalHours.toLocaleString()}</div>
+      <div class="kpi-sub">hours total</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Daily average</div>
+      <div class="kpi-value">${s.summary.avgDailyMinutes}</div>
+      <div class="kpi-sub">minutes / day</div>
     </div>
   `;
 
-  topsEl.innerHTML = `
-    <article class="card"><h3>Top artyści</h3>${list(stats.topArtists)}</article>
-    <article class="card"><h3>Top utwory</h3>${list(stats.topTracks)}</article>
-    <article class="card"><h3>Top albumy</h3>${list(stats.topAlbums)}</article>
-    <article class="card"><h3>Top gatunki</h3>${list(stats.topGenres)}</article>
+  // Top lists
+  document.getElementById('tops-grid').innerHTML = `
+    <div class="card">
+      <div class="card-title">Top Artists</div>
+      ${renderBarList(s.topArtists)}
+    </div>
+    <div class="card">
+      <div class="card-title">Top Tracks</div>
+      ${renderBarList(s.topTracks)}
+    </div>
+    <div class="card">
+      <div class="card-title">Top Albums</div>
+      ${renderBarList(s.topAlbums)}
+    </div>
+    <div class="card">
+      <div class="card-title">Top Genres</div>
+      ${renderBarList(s.topGenres)}
+    </div>
   `;
 
-  patternsEl.innerHTML = `
-    <article class="card">
-      <h3>Słuchanie wg dnia tygodnia</h3>
-      ${patternList(stats.weekdayHours, (row) => row.day)}
-    </article>
-    <article class="card">
-      <h3>Słuchanie wg godziny</h3>
-      ${patternList(stats.hourlyHours, (row) => `${String(row.hour).padStart(2, '0')}:00`)}
-    </article>
+  // Activity patterns
+  document.getElementById('patterns-grid').innerHTML = `
+    <div class="card">
+      <div class="card-title">Activity by weekday</div>
+      ${renderPatternChart(s.weekdayHours, row => WEEKDAY_SHORT[row.day] || row.day)}
+    </div>
+    <div class="card">
+      <div class="card-title">Activity by hour of day</div>
+      ${renderPatternChart(s.hourlyHours, row => String(row.hour).padStart(2, '0'))}
+    </div>
   `;
 
-  summaryEl.classList.remove('hidden');
-  topsEl.classList.remove('hidden');
-  patternsEl.classList.remove('hidden');
-  renderSourceInfo();
+  document.getElementById('data-info').textContent = dataInfo;
 }
 
-function saveCurrentUserData() {
-  const record = getCurrentUserRecord();
-  if (!record) return;
-  ensureUserData(record);
-  record.data.historyRows = entries;
-  record.data.genreRaw = Object.fromEntries(genreMap.entries());
-  record.data.sourceState = sourceState;
-  record.settings.timeRange = rangeSelect.value;
-  persistStore();
+// ──────────────────────────────────────────────────────────────
+// SCREEN TRANSITIONS
+// ──────────────────────────────────────────────────────────────
+function showAuth() {
+  document.getElementById('screen-auth').classList.remove('hidden');
+  document.getElementById('screen-app').classList.add('hidden');
 }
 
-function applyDataForCurrentUser() {
-  const record = getCurrentUserRecord();
-  if (!record) return;
-  ensureUserData(record);
-
-  entries = record.data.historyRows;
-  genreMap = parseGenreMap(record.data.genreRaw);
-  sourceState =
-    record.data.sourceState || {
-      mode: entries.length ? 'local' : 'none',
-      files: [],
-      totalRows: entries.length,
-      loadedRows: entries.length,
-      invalidRows: 0,
-      fileErrors: 0,
-      importedAt: null
-    };
-
-  rangeSelect.value = record.settings.timeRange || 'all';
-  rangeCache = new Map();
-
-  if (entries.length) {
-    showDashboardStatus(
-      `Załadowano ${entries.length} rekordów z lokalnego zapisu użytkownika ${currentUser}.`
-    );
-    render();
-  } else {
-    hideResults();
-    renderSourceInfo();
-    showDashboardStatus('Brak zapisanych danych. Wykonaj pierwszy import JSON/ZIP.');
-  }
+function showApp() {
+  document.getElementById('screen-auth').classList.add('hidden');
+  document.getElementById('screen-app').classList.remove('hidden');
+  document.getElementById('topbar-username').textContent =
+    currentUser.displayName || currentUser.username;
+  refreshAppState();
 }
 
-function setCurrentUser(username) {
-  currentUser = username;
-  setSession(username);
-  showDashboardScreen();
-  sessionInfo.textContent = `Użytkownik: ${username}`;
-  applyDataForCurrentUser();
+function refreshAppState() {
+  const hasData   = entries.length > 0;
+  const emptyEl   = document.getElementById('state-empty');
+  const dataEl    = document.getElementById('state-data');
+  emptyEl.classList.toggle('hidden', hasData);
+  dataEl.classList.toggle('hidden', !hasData);
+  if (hasData) renderDashboard();
 }
 
-async function registerLocalAccount(username, password) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const saltBase64 = toBase64(salt);
-  const hash = await hashPassword(password, saltBase64);
-
-  store.users[username] = {
-    auth: {
-      salt: saltBase64,
-      hash
-    },
-    profile: {
-      createdAt: new Date().toISOString()
-    },
-    data: {
-      historyRows: [],
-      genreRaw: null,
-      sourceState: null
-    },
-    settings: {
-      timeRange: 'all'
-    }
-  };
-
-  persistStore();
-}
-
-async function verifyLocalAccount(username, password) {
-  const record = store.users[username];
-  if (!record || !record.auth || !record.auth.salt || !record.auth.hash) {
-    return false;
-  }
-
-  const candidateHash = await hashPassword(password, record.auth.salt);
-  return candidateHash === record.auth.hash;
-}
-
-async function loadJsonArrayFromFile(file) {
-  try {
-    const parsed = JSON.parse(await file.text());
-    if (!Array.isArray(parsed)) {
-      return { rows: [], errors: [`${file.name}: wartość główna musi być tablicą`] };
-    }
-    return { rows: parsed, errors: [] };
-  } catch {
-    return { rows: [], errors: [`${file.name}: niepoprawny JSON`] };
-  }
-}
-
-function readUint16(view, offset) {
-  return view.getUint16(offset, true);
-}
-
-function readUint32(view, offset) {
-  return view.getUint32(offset, true);
-}
-
-function findEndOfCentralDirectory(view) {
-  const signature = 0x06054b50;
-  const maxCommentSize = 0xffff;
-  const start = Math.max(0, view.byteLength - (22 + maxCommentSize));
-
-  for (let offset = view.byteLength - 22; offset >= start; offset -= 1) {
-    if (readUint32(view, offset) === signature) {
-      return offset;
-    }
-  }
-
-  return -1;
-}
-
-async function inflateZipEntry(compressionMethod, compressedBytes) {
-  if (compressionMethod === 0) {
-    return compressedBytes;
-  }
-
-  if (compressionMethod !== 8) {
-    throw new Error(`Nieobsługiwana metoda kompresji ZIP: ${compressionMethod}`);
-  }
-
-  if (typeof DecompressionStream === 'undefined') {
-    throw new Error(
-      'Twoja przeglądarka nie obsługuje rozpakowywania ZIP. Użyj nowszej przeglądarki lub importuj JSON bez ZIP.'
-    );
-  }
+// ──────────────────────────────────────────────────────────────
+// IMPORT HANDLER
+// ──────────────────────────────────────────────────────────────
+async function handleImport(fileList, statusEl) {
+  if (!fileList || fileList.length === 0) return;
+  if (statusEl) statusEl.textContent = 'Reading files…';
 
   try {
-    const stream = new Blob([compressedBytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-    const inflatedBuffer = await new Response(stream).arrayBuffer();
-    return new Uint8Array(inflatedBuffer);
-  } catch {
-    throw new Error('Nie udało się zdekompresować wpisu ZIP. Archiwum może być uszkodzone.');
+    const result = await importFiles(fileList);
+    entries      = result.rows;
+    genreMap     = new Map();
+    rangeCache   = new Map();
+
+    const parts = [`${entries.length.toLocaleString()} listening events`];
+    if (result.invalidRows > 0) parts.push(`${result.invalidRows} rows skipped`);
+    if (result.fileErrors.length > 0) parts.push(`${result.fileErrors.length} file error(s)`);
+    dataInfo = `${parts.join(' · ')} · Imported ${new Date().toLocaleDateString()}`;
+
+    if (statusEl) statusEl.textContent = dataInfo;
+
+    // Persist to IndexedDB
+    await saveUserData(currentUser.username, { entries, dataInfo });
+
+    refreshAppState();
+  } catch (err) {
+    if (statusEl) statusEl.textContent = `Error: ${err.message}`;
   }
 }
 
-async function extractZipJsonEntries(fileBuffer) {
-  const view = new DataView(fileBuffer);
-  const bytes = new Uint8Array(fileBuffer);
-  const textDecoder = new TextDecoder();
-  const endOfCentralDirectory = findEndOfCentralDirectory(view);
+// ──────────────────────────────────────────────────────────────
+// DEMO DATA
+// ──────────────────────────────────────────────────────────────
+const DEMO_ARTISTS = [
+  { artist: 'Daft Punk',      track: 'Get Lucky',               album: 'Random Access Memories' },
+  { artist: 'The Weeknd',     track: 'Blinding Lights',          album: 'After Hours'            },
+  { artist: 'Tame Impala',    track: 'The Less I Know The Better', album: 'Currents'             },
+  { artist: 'Dua Lipa',       track: 'Levitating',               album: 'Future Nostalgia'       },
+  { artist: 'Arctic Monkeys', track: 'Do I Wanna Know?',         album: 'AM'                     }
+];
+const DEMO_GENRES = new Map([
+  ['Daft Punk',      ['electronic', 'french house']],
+  ['The Weeknd',     ['r&b', 'pop']],
+  ['Tame Impala',    ['psychedelic rock', 'indie']],
+  ['Dua Lipa',       ['pop', 'dance pop']],
+  ['Arctic Monkeys', ['indie rock', 'alternative']]
+]);
 
-  if (endOfCentralDirectory < 0) {
-    throw new Error('ZIP end-of-central-directory record not found');
-  }
-
-  const totalEntries = readUint16(view, endOfCentralDirectory + 10);
-  const centralDirectoryOffset = readUint32(view, endOfCentralDirectory + 16);
-  const entries = [];
-  let pointer = centralDirectoryOffset;
-
-  for (let index = 0; index < totalEntries; index += 1) {
-    if (readUint32(view, pointer) !== 0x02014b50) {
-      throw new Error('Niepoprawny nagłówek katalogu centralnego ZIP');
-    }
-
-    const compressionMethod = readUint16(view, pointer + 10);
-    const compressedSize = readUint32(view, pointer + 20);
-    const fileNameLength = readUint16(view, pointer + 28);
-    const extraLength = readUint16(view, pointer + 30);
-    const fileCommentLength = readUint16(view, pointer + 32);
-    const localHeaderOffset = readUint32(view, pointer + 42);
-
-    const fileNameBytes = bytes.subarray(pointer + 46, pointer + 46 + fileNameLength);
-    const fileName = textDecoder.decode(fileNameBytes);
-
-    if (!fileName.endsWith('/')) {
-      if (readUint32(view, localHeaderOffset) !== 0x04034b50) {
-        throw new Error('Niepoprawny lokalny nagłówek pliku ZIP');
-      }
-
-      const localFileNameLength = readUint16(view, localHeaderOffset + 26);
-      const localExtraLength = readUint16(view, localHeaderOffset + 28);
-      const dataStart = localHeaderOffset + 30 + localFileNameLength + localExtraLength;
-      const compressedBytes = bytes.subarray(dataStart, dataStart + compressedSize);
-      const inflatedBytes = await inflateZipEntry(compressionMethod, compressedBytes);
-      entries.push({ fileName, text: textDecoder.decode(inflatedBytes) });
-    }
-
-    pointer += 46 + fileNameLength + extraLength + fileCommentLength;
-  }
-
-  return entries;
-}
-
-async function loadHistoryRowsFromZip(file) {
+function createDemoEntries() {
+  const now  = new Date();
   const rows = [];
-  const errors = [];
-  const archiveEntries = await extractZipJsonEntries(await file.arrayBuffer());
-  const jsonEntries = archiveEntries.filter((entry) => entry.fileName.toLowerCase().endsWith('.json'));
-
-  if (jsonEntries.length === 0) {
-    errors.push(`${file.name}: archiwum nie zawiera plików JSON`);
-    return { rows, errors };
-  }
-
-  for (const entry of jsonEntries) {
-    try {
-      const parsed = JSON.parse(entry.text);
-      if (!Array.isArray(parsed)) {
-        errors.push(`${file.name}/${entry.fileName}: wartość główna musi być tablicą`);
-        continue;
-      }
-      rows.push(...parsed);
-    } catch {
-      errors.push(`${file.name}/${entry.fileName}: niepoprawny JSON`);
+  for (let day = 0; day < 120; day++) {
+    for (let s = 0; s < (day % 3) + 1; s++) {
+      const pick = DEMO_ARTISTS[(day + s) % DEMO_ARTISTS.length];
+      const ts   = new Date(
+        now.getTime() - day * 86_400_000 + (8 + ((day + s) % 14)) * 3_600_000
+      );
+      rows.push({
+        timestamp: ts.toISOString(),
+        artist:    pick.artist,
+        track:     pick.track,
+        album:     pick.album,
+        msPlayed:  120_000 + ((day * 17 + s * 23) % 200_000)
+      });
     }
   }
-
-  return { rows, errors };
+  return rows;
 }
 
-async function readHistoryInputs(fileList) {
-  const files = [...fileList];
-  const rows = [];
-  const errors = [];
-  const names = [];
-
-  for (const file of files) {
-    names.push(file.name);
-
-    if (file.name.toLowerCase().endsWith('.zip')) {
+// ──────────────────────────────────────────────────────────────
+// INITIALISATION
+// ──────────────────────────────────────────────────────────────
+async function init() {
+  const saved = getSession();
+  if (saved) {
+    const users = getUsers();
+    const user  = users[saved];
+    if (user) {
+      currentUser = { username: saved, displayName: user.displayName };
       try {
-        const zipResult = await loadHistoryRowsFromZip(file);
-        rows.push(...zipResult.rows);
-        errors.push(...zipResult.errors);
-      } catch {
-        errors.push(`${file.name}: niepoprawny ZIP lub nieobsługiwane archiwum`);
+        const stored = await loadUserData(saved);
+        if (stored?.entries?.length) {
+          entries  = stored.entries;
+          dataInfo = stored.dataInfo || `${entries.length.toLocaleString()} events loaded`;
+        }
+      } catch { /* IndexedDB unavailable — start fresh */ }
+      showApp();
+      return;
+    }
+  }
+  showAuth();
+}
+
+// ──────────────────────────────────────────────────────────────
+// EVENT WIRING
+// ──────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  await init();
+
+  /* ── Auth tab switcher ─── */
+  document.querySelectorAll('.auth-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.auth-tab').forEach(t => {
+        t.classList.toggle('auth-tab--active', t === tab);
+        t.setAttribute('aria-selected', String(t === tab));
+      });
+      const target = tab.dataset.tab;
+      document.getElementById('form-login').classList.toggle('hidden',    target !== 'login');
+      document.getElementById('form-register').classList.toggle('hidden', target !== 'register');
+    });
+  });
+
+  /* ── Login ─── */
+  document.getElementById('form-login').addEventListener('submit', async e => {
+    e.preventDefault();
+    const username = document.getElementById('login-username').value;
+    const password = document.getElementById('login-password').value;
+    const remember = document.getElementById('login-remember').checked;
+    const errEl    = document.getElementById('login-error');
+
+    const result = await loginUser(username, password);
+    if (!result.ok) {
+      errEl.textContent = result.error;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    errEl.classList.add('hidden');
+    setSession(result.username, remember);
+    currentUser = { username: result.username, displayName: result.displayName };
+
+    try {
+      const stored = await loadUserData(result.username);
+      if (stored?.entries?.length) {
+        entries  = stored.entries;
+        dataInfo = stored.dataInfo || `${entries.length.toLocaleString()} events loaded`;
       }
-      continue;
+    } catch { /* ignore */ }
+
+    showApp();
+  });
+
+  /* ── Register ─── */
+  document.getElementById('form-register').addEventListener('submit', async e => {
+    e.preventDefault();
+    const username  = document.getElementById('reg-username').value;
+    const password  = document.getElementById('reg-password').value;
+    const password2 = document.getElementById('reg-password2').value;
+    const errEl     = document.getElementById('reg-error');
+
+    if (password !== password2) {
+      errEl.textContent = 'Passwords do not match.';
+      errEl.classList.remove('hidden');
+      return;
     }
 
-    const jsonResult = await loadJsonArrayFromFile(file);
-    rows.push(...jsonResult.rows);
-    errors.push(...jsonResult.errors);
-  }
+    const result = await registerUser(username, password);
+    if (!result.ok) {
+      errEl.textContent = result.error;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    errEl.classList.add('hidden');
+    setSession(result.username, false);
+    const users = getUsers();
+    currentUser = { username: result.username, displayName: users[result.username].displayName };
+    entries = [];
+    showApp();
+  });
 
-  return { rows, errors, names };
-}
+  /* ── Logout ─── */
+  document.getElementById('btn-logout').addEventListener('click', () => {
+    clearSession();
+    currentUser = null;
+    entries     = [];
+    genreMap    = new Map();
+    rangeCache  = new Map();
+    showAuth();
+  });
 
-async function processImport() {
-  const historyFiles = historyInput.files;
-  if (!historyFiles || historyFiles.length === 0) {
-    showDashboardStatus('Wybierz co najmniej jeden plik JSON lub ZIP do importu.', true);
-    return;
-  }
+  /* ── Import (empty state drop zone) ─── */
+  const dropZone     = document.getElementById('drop-zone');
+  const importInput  = document.getElementById('import-files');
+  const importStatus = document.getElementById('import-status');
 
-  try {
-    const { rows: rawRows, errors, names } = await readHistoryInputs(historyFiles);
-    const report = normalizeHistoryRowsWithReport(rawRows);
+  importInput.addEventListener('change', e => handleImport(e.target.files, importStatus));
 
-    entries = report.rows;
+  dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop',      e  => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    handleImport(e.dataTransfer.files, importStatus);
+  });
+  dropZone.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); importInput.click(); }
+  });
+
+  /* ── Reimport (dashboard toolbar) ─── */
+  document.getElementById('reimport-files').addEventListener('change', e =>
+    handleImport(e.target.files, document.getElementById('import-status'))
+  );
+
+  /* ── Clear data ─── */
+  document.getElementById('btn-clear-data').addEventListener('click', async () => {
+    if (!confirm('Delete all your saved listening data? This cannot be undone.')) return;
+    await clearUserData(currentUser.username);
+    entries    = [];
+    genreMap   = new Map();
     rangeCache = new Map();
+    dataInfo   = '';
+    refreshAppState();
+  });
 
-    if (genreInput.files?.[0]) {
-      const parsedGenre = JSON.parse(await genreInput.files[0].text());
-      genreMap = parseGenreMap(parsedGenre);
-    }
+  /* ── Range pills ─── */
+  document.getElementById('range-pills').addEventListener('click', e => {
+    const pill = e.target.closest('.pill');
+    if (!pill) return;
+    document.querySelectorAll('.pill').forEach(p =>
+      p.classList.toggle('pill--active', p === pill)
+    );
+    currentRange = pill.dataset.range;
+    renderDashboard();
+  });
 
-    sourceState = {
-      mode: 'import',
-      files: names,
-      totalRows: report.totalRows,
-      loadedRows: report.rows.length,
-      invalidRows: report.invalidRows,
-      fileErrors: errors.length,
-      importedAt: new Date().toISOString()
-    };
-
-    saveCurrentUserData();
-
-    const bits = [
-      `Zaimportowano ${report.rows.length} rekordów z ${report.totalRows} wierszy`,
-      `${report.invalidRows} pominiętych wpisów`,
-      `${errors.length} błędów plików/parsingu`
-    ];
-
-    showDashboardStatus(bits.join(' · '), report.rows.length === 0);
-
-    if (entries.length) {
-      render();
-    } else {
-      hideResults();
-      renderSourceInfo();
-    }
-  } catch {
-    showDashboardStatus('Import nie powiódł się. Sprawdź format plików JSON/ZIP.', true);
-  }
-}
-
-function loadDemo() {
-  entries = createDemoEntries();
-  genreMap = parseGenreMap(DEMO_GENRE_MAP_OBJECT);
-  rangeCache = new Map();
-
-  sourceState = {
-    mode: 'demo',
-    files: ['demo-data'],
-    totalRows: entries.length,
-    loadedRows: entries.length,
-    invalidRows: 0,
-    fileErrors: 0,
-    importedAt: new Date().toISOString()
-  };
-
-  saveCurrentUserData();
-  showDashboardStatus(`Załadowano ${entries.length} demo rekordów.`);
-  render();
-}
-
-function clearCurrentUserData() {
-  const record = getCurrentUserRecord();
-  if (!record) return;
-
-  ensureUserData(record);
-  record.data = { historyRows: [], genreRaw: null, sourceState: null };
-  record.settings.timeRange = 'all';
-  persistStore();
-
-  entries = [];
-  genreMap = new Map();
-  rangeCache = new Map();
-  sourceState = {
-    mode: 'none',
-    files: [],
-    totalRows: 0,
-    loadedRows: 0,
-    invalidRows: 0,
-    fileErrors: 0,
-    importedAt: null
-  };
-
-  historyInput.value = '';
-  genreInput.value = '';
-  rangeSelect.value = 'all';
-  hideResults();
-  renderSourceInfo();
-  showDashboardStatus('Lokalne dane użytkownika zostały wyczyszczone.');
-}
-
-function logout() {
-  currentUser = null;
-  clearSession();
-  entries = [];
-  genreMap = new Map();
-  rangeCache = new Map();
-  showAuthScreen();
-  switchAuthTab('login');
-  showAuthMessage('Wylogowano.');
-}
-
-loginTabBtn.addEventListener('click', () => switchAuthTab('login'));
-registerTabBtn.addEventListener('click', () => switchAuthTab('register'));
-
-loginForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const username = normalizeUsername(loginUsername.value);
-  const password = loginPassword.value;
-
-  if (!username || !password) {
-    showAuthMessage('Uzupełnij nazwę użytkownika i hasło.', true);
-    return;
-  }
-
-  const ok = await verifyLocalAccount(username, password);
-  if (!ok) {
-    showAuthMessage('Niepoprawna nazwa użytkownika lub hasło.', true);
-    return;
-  }
-
-  showAuthMessage('Zalogowano pomyślnie.');
-  loginPassword.value = '';
-  setCurrentUser(username);
+  /* ── Load demo data ─── */
+  document.getElementById('btn-load-demo').addEventListener('click', async () => {
+    entries    = createDemoEntries();
+    genreMap   = DEMO_GENRES;
+    rangeCache = new Map();
+    dataInfo   = `${entries.length} demo listening events loaded`;
+    await saveUserData(currentUser.username, { entries, dataInfo });
+    refreshAppState();
+  });
 });
 
-registerForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const username = normalizeUsername(registerUsername.value);
-  const password = registerPassword.value;
-
-  if (username.length < 3 || password.length < PASSWORD_MIN_LENGTH) {
-    showAuthMessage(`Nazwa min. 3 znaki, hasło min. ${PASSWORD_MIN_LENGTH} znaków.`, true);
-    return;
-  }
-
-  if (store.users[username]) {
-    showAuthMessage('Taki użytkownik już istnieje.', true);
-    return;
-  }
-
-  await registerLocalAccount(username, password);
-  showAuthMessage('Konto utworzone. Możesz się zalogować.');
-  registerForm.reset();
-  switchAuthTab('login');
-});
-
-logoutBtn.addEventListener('click', logout);
-importBtn.addEventListener('click', processImport);
-loadDemoBtn.addEventListener('click', loadDemo);
-clearDataBtn.addEventListener('click', clearCurrentUserData);
-
-rangeSelect.addEventListener('change', () => {
-  if (!currentUser) return;
-  const record = getCurrentUserRecord();
-  if (record) {
-    ensureUserData(record);
-    record.settings.timeRange = rangeSelect.value;
-    persistStore();
-  }
-
-  if (entries.length) {
-    render();
-  }
-});
-
-(function init() {
-  ensureLatestBuild();
-  if (appVersionEl) {
-    appVersionEl.textContent = `Build ${APP_BUILD_VERSION}`;
-  }
-  renderSourceInfo();
-  const persistedUser = getSessionUser();
-  if (persistedUser && store.users[persistedUser]) {
-    setCurrentUser(persistedUser);
-    return;
-  }
-
-  showAuthScreen();
-  switchAuthTab('login');
-  showAuthMessage('Zaloguj się lub utwórz konto lokalne.');
-})();
