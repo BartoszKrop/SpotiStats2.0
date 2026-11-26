@@ -42,7 +42,7 @@
     visible: new Map(), // key -> kolor (dla wykresu top 10)
     visibleFor: '',
     artist: '',
-    artistSpan: 'all',
+    artistSpan: 'range', // wykres wykonawcy domyślnie trzyma się wybranego okresu
     artistUnit: null,
     recordsKind: 'artist',
     showMore: false, // topki: 10 pozycji albo 25
@@ -58,7 +58,7 @@
   function loadPrefs() {
     try {
       const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
-      for (const k of ['range', 'year', 'sortBy', 'topKind', 'artist', 'artistSpan', 'slot']) if (p[k] != null) state[k] = p[k];
+      for (const k of ['range', 'year', 'sortBy', 'topKind', 'artist', 'slot']) if (p[k] != null) state[k] = p[k];
       const q = Number(new URLSearchParams(location.search).get('konto'));
       if (q >= 1 && q <= 5) state.slot = q;
     } catch { /* brak dostępu do localStorage — trudno */ }
@@ -319,7 +319,7 @@
     renderTops(slice);
     renderKings(slice, from, to);
     renderWhen(slice);
-    renderRecords();
+    renderRecords(slice, from, to);
     renderTopChart(slice, from, to);
     renderArtist(from, to);
   }
@@ -410,18 +410,21 @@
   // ─────────────────────────────────────────────────────── REKORDY
   const plWeeks = (n) => `${nf.format(n)} ${n === 1 ? 'tydzień' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'tygodnie' : 'tygodni'}`;
   const fmtWeek = (ms) => `tydzień od ${fmtDate(ms)}`;
-  let recordsCache = { rows: null, sortBy: null, data: {} };
-  function recordsFor(kind) {
-    if (recordsCache.rows !== state.rows || recordsCache.sortBy !== state.sortBy) recordsCache = { rows: state.rows, sortBy: state.sortBy, data: {} };
-    return (recordsCache.data[kind] ||= A.records(state.rows, kind, { limit: 5, sortBy: state.sortBy }));
+  let recordsCache = { rows: null, from: null, to: null, sortBy: null, data: {} };
+  function recordsFor(kind, slice, from, to) {
+    const c = recordsCache;
+    if (c.rows !== state.rows || c.from !== from || c.to !== to || c.sortBy !== state.sortBy) recordsCache = { rows: state.rows, from, to, sortBy: state.sortBy, data: {} };
+    return (recordsCache.data[kind] ||= A.records(slice, kind, { limit: 5, sortBy: state.sortBy }));
   }
-  function renderRecords() {
+  let lastRecordsArgs = null;
+  function renderRecords(slice, from, to) {
+    if (slice) lastRecordsArgs = [slice, from, to]; else if (lastRecordsArgs) [slice, from, to] = lastRecordsArgs; else return;
     document.querySelectorAll('#records-kind button').forEach((b) => {
       b.classList.toggle('is-active', b.dataset.kind === state.recordsKind);
       b.setAttribute('aria-pressed', String(b.dataset.kind === state.recordsKind));
     });
     const kind = state.recordsKind;
-    const r = recordsFor(kind);
+    const r = recordsFor(kind, slice, from, to);
     const el = document.getElementById('records-body');
     if (!r.totalWeeks) { el.innerHTML = '<p class="no-data">Brak odsłuchów.</p>'; return; }
     const av = (it, cls) => (kind === 'artist' ? artistAvatar(it.name, cls) : coverAvatar(`${it.name} ${it.artist}`, it.artist, it.album, cls));
