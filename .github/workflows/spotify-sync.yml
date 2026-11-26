@@ -2,8 +2,9 @@ name: Spotify – dociąganie odsłuchów
 
 on:
   schedule:
-    # Co godzinę (Spotify oddaje tylko 50 ostatnich utworów, więc trzeba pytać często).
-    - cron: '17 * * * *'
+    # Dwa razy na godzinę (Spotify oddaje tylko 50 ostatnich utworów, więc trzeba pytać często;
+    # GitHub potrafi pominąć pojedyncze uruchomienia, a duplikaty odsłuchów i tak są odfiltrowane).
+    - cron: '7,37 * * * *'
   workflow_dispatch:
     inputs:
       code:
