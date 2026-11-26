@@ -225,7 +225,7 @@ export async function writeIndex(root) {
   for (let slot = 1; slot <= SLOTS; slot++) {
     const st = await readJson(join(slotDir(root, slot), 'status.json'), null);
     list.push(st && st.connectedAt
-      ? { slot, name: st.name || `Konto ${slot}`, connectedAt: st.connectedAt, lastSync: st.lastSync || null, lastPlayedAt: st.lastPlayedAt || null, error: st.error || null, files: st.files || [] }
+      ? { slot, name: st.name || null, connectedAt: st.connectedAt, lastSync: st.lastSync || null, lastPlayedAt: st.lastPlayedAt || null, error: st.error || null, files: st.files || [] }
       : { slot, name: null });
   }
   await writeJson(join(root, 'konta.json'), { slots: list, updatedAt: new Date().toISOString() });
