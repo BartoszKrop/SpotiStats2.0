@@ -2,9 +2,9 @@
  "slots": [
   {
    "slot": 1,
-   "name": "Konto 1",
+   "name": null,
    "connectedAt": "2026-11-26T18:30:14.414Z",
-   "lastSync": "2026-11-26T18:48:32.601Z",
+   "lastSync": "2026-11-26T18:49:13.058Z",
    "lastPlayedAt": "2026-11-26T18:35:21.132Z",
    "error": null,
    "files": [
@@ -28,5 +28,5 @@
    "name": null
   }
  ],
- "updatedAt": "2026-11-26T18:48:32.602Z"
+ "updatedAt": "2026-11-26T18:49:13.059Z"
 }
