@@ -174,7 +174,7 @@
       const key = keyOf(r);
       let e = map.get(key);
       if (!e) {
-        e = { key, name: kind === 'artist' ? r.artist : kind === 'track' ? r.track : r.album, artist: r.artist, ms: 0, plays: 0 };
+        e = { key, name: kind === 'artist' ? r.artist : kind === 'track' ? r.track : r.album, artist: r.artist, album: r.album, ms: 0, plays: 0 };
         map.set(key, e);
       }
       e.ms += r.ms;

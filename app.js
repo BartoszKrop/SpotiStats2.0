@@ -48,7 +48,9 @@
     slot: 1,
     accounts: null, // z konta.json (null = jeszcze nie wczytane / brak sieci)
     liveCache: new Map(), // slot -> znormalizowane wiersze z automatu
-    images: new Map() // nazwa wykonawcy małymi literami -> url zdjęcia (z automatu)
+    images: new Map(), // nazwa wykonawcy małymi literami -> url zdjęcia (z automatu)
+    covers: new Map(), // „wykonawca|album” małymi literami -> url okładki
+    imagesReady: new Set() // adresy zdjęć już wczytanych (tylko te pokazujemy — bez migania)
   };
 
   function loadPrefs() {
@@ -205,8 +207,25 @@
   /** Zdjęcie wykonawcy, jeśli automat je zdobył — inaczej kolorowe inicjały. */
   function artistAvatar(name, cls = '') {
     const img = state.images.get(String(name).toLowerCase());
-    if (!img) return avatar(name, cls);
-    return `<span class="avatar avatar--img ${cls}" style="--h:${hueOf(name)}" aria-hidden="true"><img src="${esc(img)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()" />${esc(initials(name))}</span>`;
+    if (!img || !state.imagesReady.has(img)) return avatar(name, cls);
+    return `<span class="avatar avatar--img ${cls}" style="--h:${hueOf(name)}" aria-hidden="true"><img src="${esc(img)}" alt="" decoding="sync" referrerpolicy="no-referrer" onerror="this.remove()" />${esc(initials(name))}</span>`;
+  }
+  /** Okładka albumu (utworu / albumu), jeśli automat ją zdobył — inaczej kolorowe inicjały. */
+  function coverAvatar(title, artist, album, cls = '') {
+    const img = album ? state.covers.get(`${String(artist).toLowerCase()}|${String(album).toLowerCase()}`) : null;
+    if (!img || !state.imagesReady.has(img)) return avatar(title, cls);
+    return `<span class="avatar avatar--img ${cls}" style="--h:${hueOf(title)}" aria-hidden="true"><img src="${esc(img)}" alt="" decoding="sync" referrerpolicy="no-referrer" onerror="this.remove()" />${esc(initials(title))}</span>`;
+  }
+  /** Wczytuje zdjęcia w tle; strona przerysowuje się raz, gdy są gotowe (nie co zdjęcie). */
+  function preloadImages(urls, limit = 200, timeoutMs = 6000) {
+    const jobs = [...new Set(urls)].slice(0, limit).map((url) => new Promise((resolve) => {
+      const im = new Image();
+      im.referrerPolicy = 'no-referrer';
+      im.onload = () => { state.imagesReady.add(url); resolve(); };
+      im.onerror = () => resolve();
+      im.src = url;
+    }));
+    return Promise.race([Promise.all(jobs), new Promise((r) => setTimeout(r, timeoutMs))]);
   }
 
   function accountOf(slot) {
@@ -333,7 +352,7 @@
       const other = state.sortBy === 'plays' ? `${nf.format(minutes(it.ms))} min` : `${nf.format(it.plays)} odtw.`;
       return `<li class="track-row" data-artist="${esc(it.artist)}" tabindex="0" role="button" title="Pokaż wykres: ${esc(it.artist)}">
         <span class="track-rank">${i + 1}</span>
-        ${avatar(kind === 'album' ? it.name : `${it.name} ${it.artist}`, 'avatar--cover')}
+        ${coverAvatar(kind === 'album' ? it.name : `${it.name} ${it.artist}`, it.artist, kind === 'album' ? it.name : it.album, 'avatar--cover')}
         <span class="track-text"><span class="track-name">${esc(it.name)}</span><span class="track-sub">${esc(it.artist)}</span></span>
         <span class="track-val" title="${other}">${valueOf(it)}</span>
       </li>`;
@@ -751,7 +770,9 @@
     loadLiveFor(state.slot);
     try {
       state.images = await L.loadArtistImages();
-      if (state.images.size) render();
+      state.covers = await L.loadAlbumCovers().catch(() => new Map());
+      await preloadImages([...state.images.values(), ...state.covers.values()], 300);
+      if (state.imagesReady.size) render();
     } catch { /* bez zdjęć — zostają inicjały */ }
   }
 
