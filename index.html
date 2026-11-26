@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=20" />
+    <link rel="stylesheet" href="./styles.css?v=21" />
   </head>
   <body>
     <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -117,7 +117,7 @@
             <p id="import-status" class="import-status" role="status" aria-live="polite"></p>
             <div id="friend-help" class="friend-help hidden"></div>
             <button id="btn-load-demo" class="btn btn--ghost btn--sm" type="button">Pokaż na danych przykładowych</button>
-            <p class="import-note">Eksport zostaje w tej przeglądarce i wczytuje się sam przy każdym wejściu — wgrywasz go tylko raz. Nic nie jest wysyłane na serwer.</p>
+            <p class="import-note">Eksport zostaje w tej przeglądarce i wczytuje się sam przy każdym wejściu — wgrywasz go tylko raz. Eksport nigdzie nie jest wysyłany. Jedynie nazwy wykonawców i albumów trafiają do publicznego API Deezera, by pobrać zdjęcia i okładki.</p>
             <p class="import-note">Wskazówka: otwórz stronę w zwykłej przeglądarce (Safari / Chrome), a nie z okienka innej aplikacji, i dodaj ją do ekranu głównego — wtedy dane na pewno zostają.</p>
           </div>
         </section>
@@ -265,10 +265,11 @@
     </nav>
 
     <script src="./jszip.min.js"></script>
-    <script src="./analytics.js?v=20"></script>
-    <script src="./charts.js?v=20"></script>
-    <script src="./cloud.js?v=20"></script>
-    <script src="./live.js?v=20"></script>
-    <script src="./app.js?v=20"></script>
+    <script src="./analytics.js?v=21"></script>
+    <script src="./charts.js?v=21"></script>
+    <script src="./art.js?v=21"></script>
+    <script src="./cloud.js?v=21"></script>
+    <script src="./live.js?v=21"></script>
+    <script src="./app.js?v=21"></script>
   </body>
 </html>
