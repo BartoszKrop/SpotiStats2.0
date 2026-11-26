@@ -92,6 +92,9 @@
     const n = buckets.length;
     const x = (i) => pad.left + (n === 1 ? w / 2 : (i / (n - 1)) * w);
     const maxRank = opts.maxRank || 10;
+    // rankOut: najniższy poziom (maxRank) znaczy „poza topką” — linia tam schodzi, ale nie ciągnie się po dnie.
+    const outLevel = rank && opts.rankOut ? maxRank : 0;
+    const isIn = (v) => v != null && v !== outLevel;
     const y = rank
       ? (v) => pad.top + ((v - 1) / Math.max(1, maxRank - 1)) * h
       : (v) => pad.top + h - (v / yMax) * h;
@@ -105,7 +108,7 @@
       for (let r = 1; r <= maxRank; r++) {
         el('line', { x1: pad.left, x2: pad.left + w, y1: y(r), y2: y(r), class: r === 1 ? 'chart-baseline' : '' }, grid);
         const t = el('text', { x: pad.left - 8, y: y(r) + 4, 'text-anchor': 'end', class: 'chart-tick' }, grid);
-        t.textContent = `#${r}`;
+        t.textContent = outLevel && r === outLevel ? 'dalej' : `#${r}`;
       }
     }
     for (let v = 0; !rank && v <= top + 1e-9; v += step) {
@@ -131,14 +134,26 @@
       // null przerywa linię (np. wykonawca wypadł z top 10 w danym tygodniu)
       let d = '';
       let pen = false;
-      s.values.forEach((v, i) => {
-        if (v == null) { pen = false; return; }
-        d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
-        pen = true;
-      });
-      if (rank && n <= 80) {
-        // Pojedyncze tygodnie bez sąsiadów byłyby niewidoczne — kropki dla każdego punktu.
-        s.values.forEach((v, i) => { if (v != null) el('circle', { cx: x(i), cy: y(v), r: v === 1 ? 3.5 : 2.5, fill: s.color }, lines); });
+      if (outLevel) {
+        // Odcinek tylko tam, gdzie choć jeden koniec jest w topce.
+        let last = -1;
+        for (let i = 1; i < n; i++) {
+          const a = s.values[i - 1], b = s.values[i];
+          if (a == null || b == null || (!isIn(a) && !isIn(b))) continue;
+          if (last !== i - 1) d += `M${x(i - 1).toFixed(1)},${y(a).toFixed(1)}`;
+          d += `L${x(i).toFixed(1)},${y(b).toFixed(1)}`;
+          last = i;
+        }
+      } else {
+        s.values.forEach((v, i) => {
+          if (v == null) { pen = false; return; }
+          d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
+          pen = true;
+        });
+      }
+      if (rank && n <= 24) {
+        // Pojedyncze okresy bez sąsiadów byłyby niewidoczne — kropki dla każdego punktu w topce.
+        s.values.forEach((v, i) => { if (isIn(v)) el('circle', { cx: x(i), cy: y(v), r: v === 1 ? 4 : 3, fill: s.color }, lines); });
       }
       if (opts.area && series.length === 1) {
         el('path', { d: `${d}L${x(n - 1).toFixed(1)},${y(0)}L${x(0).toFixed(1)},${y(0)}Z`, fill: s.color, 'fill-opacity': 0.14, stroke: 'none' }, lines);
@@ -164,14 +179,15 @@
       vline.setAttribute('x2', x(i));
       series.forEach((s, k) => {
         const v = s.values[i];
-        dots[k].setAttribute('visibility', v == null ? 'hidden' : 'visible');
-        if (v == null) return;
+        const hiddenDot = rank ? !isIn(v) : v == null;
+        dots[k].setAttribute('visibility', hiddenDot ? 'hidden' : 'visible');
+        if (hiddenDot) return;
         dots[k].setAttribute('cx', x(i));
         dots[k].setAttribute('cy', y(v));
       });
       const rows = series
         .map((s) => ({ s, v: s.values[i] }))
-        .filter(({ v }) => !rank || v != null)
+        .filter(({ v }) => !rank || isIn(v))
         .sort((a, b) => (rank ? a.v - b.v : b.v - a.v))
         .map(({ s, v }) => `<div class="chart-tip__row"><span class="swatch" style="background:${s.color}"></span><span class="chart-tip__name">${esc(s.name)}</span><span class="chart-tip__val">${rank ? `#${v}` : fmtMinutes(v)}</span></div>`)
         .join('');

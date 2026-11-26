@@ -290,7 +290,11 @@
    *   series   — [{ key, values }] pozycje 1..depth (null = poza topką) dla `limit` wykonawców,
    *              którzy najczęściej byli nr 1 (dobierani dalej wg łącznego czasu).
    */
-  function rankTimeline(rows, from, to, unit, { depth = 10, limit = 6, sortBy = 'ms' } = {}) {
+  /**
+   * outside: true → zamiast null (poza top `depth`) zwraca depth + 1, żeby linia schodziła na dół wykresu
+   * zamiast się urywać; null zostaje tylko dla okresów bez żadnych odsłuchów.
+   */
+  function rankTimeline(rows, from, to, unit, { depth = 10, limit = 6, sortBy = 'ms', outside = false } = {}) {
     const buckets = bucketList(from, to, unit);
     const index = new Map(buckets.map((b, i) => [b, i]));
     const per = buckets.map(() => new Map());
@@ -324,7 +328,8 @@
       key: name,
       values: rankings.map((list) => {
         const pos = list.findIndex(([n]) => n === name);
-        return pos >= 0 && pos < depth ? pos + 1 : null;
+        if (pos >= 0 && pos < depth) return pos + 1;
+        return outside && list.length ? depth + 1 : null;
       })
     }));
     return { buckets, leaders, kings, series };

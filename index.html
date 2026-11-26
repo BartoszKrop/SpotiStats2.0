@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#121212" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=5" />
+    <link rel="stylesheet" href="./styles.css?v=7" />
   </head>
   <body>
     <div class="layout">
@@ -19,7 +19,7 @@
 
         <nav class="side-nav" aria-label="Sekcje">
           <a href="#sec-top" class="side-link">Topki</a>
-          <a href="#sec-kings" class="side-link">Nr 1 tygodnia</a>
+          <a href="#sec-kings" class="side-link">Nr 1 wykonawca</a>
           <a href="#sec-trend" class="side-link">Top 10 w czasie</a>
           <a href="#artist-card" class="side-link">Wykonawca</a>
           <a href="./spotify.html" class="side-link">Automat</a>
@@ -109,7 +109,7 @@
 
           <section id="sec-kings" class="section card">
             <div class="section-head">
-              <h2 class="section-title">Nr 1 tygodnia</h2>
+              <h2 class="section-title">Nr 1 wykonawca</h2>
               <div class="card-controls">
                 <div class="seg" id="kings-unit" role="group" aria-label="Okres">
                   <button type="button" data-unit="week">Tygodnie</button>
@@ -126,7 +126,7 @@
               <div class="kings-chart">
                 <div id="kings-legend" class="legend"></div>
                 <div id="kings-chart"></div>
-                <p class="hint">Pozycja w rankingu wykonawców w każdym okresie (#1 na górze). Przerwa w linii = poza top 10.</p>
+                <p class="hint">Pozycja w rankingu wykonawców w każdym okresie (#1 na górze). „dalej” = poza top 5.</p>
               </div>
             </div>
           </section>
@@ -177,9 +177,9 @@
     </div>
 
     <script src="./jszip.min.js"></script>
-    <script src="./analytics.js?v=5"></script>
-    <script src="./charts.js?v=5"></script>
-    <script src="./live.js?v=5"></script>
-    <script src="./app.js?v=5"></script>
+    <script src="./analytics.js?v=7"></script>
+    <script src="./charts.js?v=7"></script>
+    <script src="./live.js?v=7"></script>
+    <script src="./app.js?v=7"></script>
   </body>
 </html>
