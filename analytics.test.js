@@ -1,85 +1,143 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import {
-  buildStats,
-  filterByRange,
-  normalizeHistoryRows,
-  normalizeHistoryRowsWithReport,
-  parseGenreMap
-} from './analytics.js';
+// Uruchom: node --test
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const A = require('./analytics.js');
 
-const sampleRows = [
-  {
-    endTime: '2026-04-19T10:00:00Z',
-    artistName: 'Artist A',
-    trackName: 'Track 1',
-    albumName: 'Album 1',
-    msPlayed: 180000
-  },
-  {
-    endTime: '2026-04-18T23:00:00Z',
-    artistName: 'Artist B',
-    trackName: 'Track 2',
-    albumName: 'Album 2',
-    msPlayed: 240000
-  },
-  {
-    endTime: '2025-10-10T11:00:00Z',
-    artistName: 'Artist A',
-    trackName: 'Track 1',
-    albumName: 'Album 1',
-    msPlayed: 120000
-  }
-];
+function ext(ts, artist, track, ms, extra = {}) {
+  return {
+    ts,
+    ms_played: ms,
+    master_metadata_track_name: track,
+    master_metadata_album_artist_name: artist,
+    master_metadata_album_album_name: `${artist} LP`,
+    spotify_track_uri: track ? `spotify:track:${artist}-${track}` : null,
+    episode_name: null,
+    spotify_episode_uri: null,
+    skipped: false,
+    ...extra
+  };
+}
 
-test('normalizeHistoryRows handles standard spotify export schema', () => {
-  const normalized = normalizeHistoryRows(sampleRows);
-  assert.equal(normalized.length, 3);
-  assert.equal(normalized[0].artist, 'Artist A');
-  assert.equal(normalized[1].track, 'Track 2');
+test('classifyFile rozpoznaje pliki z historią', () => {
+  assert.equal(A.classifyFile('Spotify Extended Streaming History/Streaming_History_Audio_2023_1.json'), 'extended');
+  assert.equal(A.classifyFile('MyData/endsong_0.json'), 'extended');
+  assert.equal(A.classifyFile('Spotify Account Data/StreamingHistory_music_0.json'), 'short');
+  assert.equal(A.classifyFile('Spotify Account Data/StreamingHistory0.json'), 'short');
+  assert.equal(A.classifyFile('Spotify Account Data/StreamingHistory_podcast_0.json'), 'skip');
+  assert.equal(A.classifyFile('Spotify Account Data/Userdata.json'), 'skip');
+  assert.equal(A.classifyFile('Spotify Account Data/SearchQueries.json'), 'skip');
+  assert.equal(A.classifyFile('ReadMeFirst.pdf'), 'skip');
 });
 
-test('filterByRange supports today, week and rolling periods', () => {
-  const normalized = normalizeHistoryRows(sampleRows);
-  const now = new Date('2026-04-19T12:00:00Z');
-  assert.equal(filterByRange(normalized, 'today', now).length, 1);
-  assert.equal(filterByRange(normalized, '1w', now).length, 2);
-  assert.equal(filterByRange(normalized, '6m', now).length, 2);
-  assert.equal(filterByRange(normalized, '1m', now).length, 2);
-  assert.equal(filterByRange(normalized, 'all', now).length, 3);
+test('normalizeRows odrzuca podcasty, puste wiersze i duplikaty', () => {
+  const rows = [
+    ext('2026-01-01T10:00:00Z', 'A', 'Song', 200000),
+    ext('2026-01-01T10:00:00Z', 'A', 'Song', 200000), // duplikat z nakładających się plików
+    ext('2026-01-01T11:00:00Z', null, null, 1500000, { episode_name: 'Odc. 1', spotify_episode_uri: 'spotify:episode:x' }),
+    ext('2026-01-01T12:00:00Z', null, null, 50000), // brak metadanych
+    ext('2026-01-01T13:00:00Z', 'B', 'Other', 0), // 0 ms
+    { endTime: '2025-12-31 23:59', artistName: 'C', trackName: 'Krótki', msPlayed: 90000 }
+  ];
+  const { rows: out, report } = A.normalizeRows(rows);
+  assert.equal(out.length, 2);
+  assert.equal(report.duplicates, 1);
+  assert.equal(report.podcasts, 2);
+  assert.equal(report.invalid, 1);
+  assert.equal(out[0].artist, 'C'); // posortowane rosnąco
+  assert.equal(out[0].t, Date.parse('2025-12-31T23:59:00Z'));
 });
 
-test('buildStats returns top entities and activity metrics', () => {
-  const normalized = normalizeHistoryRows(sampleRows);
-  const genreMap = parseGenreMap({ 'Artist A': ['pop'], 'Artist B': ['rock'] });
-  const stats = buildStats(normalized, genreMap);
-
-  assert.equal(stats.summary.totalPlays, 3);
-  assert.equal(stats.topArtists[0].label, 'Artist A');
-  assert.equal(stats.topTracks[0].label, 'Track 1 — Artist A');
-  assert.equal(stats.topAlbums[0].label, 'Album 1 — Artist A');
-  assert.deepEqual(
-    stats.topGenres.map((genre) => genre.label).sort(),
-    ['pop', 'rock']
-  );
-  assert.equal(stats.weekdayHours.length, 7);
-  assert.equal(stats.hourlyHours.length, 24);
+test('combineFiles pomija krótką historię, gdy jest rozszerzona', () => {
+  const files = [
+    { name: 'Spotify Extended Streaming History/Streaming_History_Audio_2026.json', data: [ext('2026-01-01T10:00:00Z', 'A', 'S', 100000)] },
+    { name: 'Spotify Account Data/StreamingHistory_music_0.json', data: [{ endTime: '2026-01-01 10:00', artistName: 'A', trackName: 'S', msPlayed: 100000 }] },
+    { name: 'Spotify Account Data/Userdata.json', data: { username: 'x' } }
+  ];
+  const { rows, report } = A.combineFiles(files);
+  assert.equal(rows.length, 1);
+  assert.equal(report.format, 'extended');
+  assert.equal(report.skippedFiles.length, 2);
 });
 
-test('normalizeHistoryRowsWithReport counts invalid and keeps valid rows', () => {
-  const report = normalizeHistoryRowsWithReport([
-    { endTime: '2026-04-19T10:00:00Z', artistName: 'A', trackName: 'T1', albumName: 'L1', msPlayed: 1000 },
-    { endTime: 'invalid', artistName: 'A', trackName: 'T1', albumName: 'L1', msPlayed: 1000 },
-    { endTime: '2026-04-19T11:00:00Z', artistName: 'B', trackName: 'T2', albumName: 'L2', msPlayed: 0 },
-    {}
+test('top liczy odtworzenia tylko od 30 s, czas zawsze', () => {
+  const { rows } = A.normalizeRows([
+    ext('2026-01-01T10:00:00Z', 'A', 'S1', 200000),
+    ext('2026-01-01T10:05:00Z', 'A', 'S1', 5000), // przewinięte
+    ext('2026-01-01T10:10:00Z', 'B', 'S2', 60000),
+    ext('2026-01-01T10:20:00Z', 'B', 'S2', 60000),
+    ext('2026-01-01T10:30:00Z', 'B', 'S3', 60000)
   ]);
-
-  assert.equal(report.rows.length, 1);
-  assert.equal(report.invalidRows, 3);
-  assert.equal(report.totalRows, 4);
+  const byTime = A.top(rows, 'artist');
+  assert.deepEqual(byTime.map((a) => [a.name, a.plays, a.ms]), [['A', 1, 205000], ['B', 3, 180000]]);
+  const byPlays = A.top(rows, 'artist', { sortBy: 'plays' });
+  assert.equal(byPlays[0].name, 'B');
+  const tracks = A.top(rows, 'track');
+  assert.equal(tracks[0].name, 'S1');
+  assert.equal(tracks[0].artist, 'A');
 });
 
-test('normalizeHistoryRows handles empty input and parseGenreMap ignores invalid schema', () => {
-  assert.deepEqual(normalizeHistoryRows([]), []);
-  assert.equal(parseGenreMap('not-an-object').size, 0);
+test('rangeBounds: 7 dni, 28 dni, pół roku, rok, all time', () => {
+  const anchor = new Date(2026, 10, 20, 15, 0).getTime(); // 20 lis 2026, 15:00
+  const end = new Date(2026, 10, 21).getTime();
+  assert.deepEqual(A.rangeBounds('7d', anchor), { from: new Date(2026, 10, 14).getTime(), to: end });
+  assert.deepEqual(A.rangeBounds('28d', anchor), { from: new Date(2026, 9, 24).getTime(), to: end });
+  assert.deepEqual(A.rangeBounds('6m', anchor), { from: new Date(2026, 4, 21).getTime(), to: end });
+  assert.deepEqual(A.rangeBounds('year', anchor, { year: 2024 }), { from: new Date(2024, 0, 1).getTime(), to: new Date(2025, 0, 1).getTime() });
+  assert.deepEqual(A.rangeBounds('all', anchor, { first: 5 }), { from: 5, to: end });
+});
+
+test('sliceRange wycina po czasie (wyszukiwanie binarne)', () => {
+  const rows = [1, 5, 10, 20].map((t) => ({ t }));
+  assert.deepEqual(A.sliceRange(rows, 5, 20).map((r) => r.t), [5, 10]);
+  assert.deepEqual(A.sliceRange(rows, 0, 100).length, 4);
+});
+
+test('timeline sumuje minuty w tygodniach od poniedziałku i wypełnia zera', () => {
+  const t = (d, h = 12) => new Date(2026, 0, d, h).getTime(); // styczeń 2026, 5 sty = poniedziałek
+  const rows = [
+    { t: t(5), artist: 'A', ms: 120000 },
+    { t: t(11), artist: 'A', ms: 60000 }, // niedziela, ten sam tydzień
+    { t: t(12), artist: 'B', ms: 60000 },
+    { t: t(26), artist: 'A', ms: 30000 }
+  ];
+  const tl = A.timeline(rows, t(5, 0), t(27, 0), 'week', [
+    { key: 'A', match: (r) => r.artist === 'A' },
+    { key: 'B', match: (r) => r.artist === 'B' }
+  ]);
+  assert.equal(tl.buckets.length, 4);
+  assert.equal(tl.buckets[0], new Date(2026, 0, 5).getTime());
+  assert.deepEqual(tl.series[0].values, [3, 0, 0, 0.5]);
+  assert.deepEqual(tl.series[1].values, [0, 1, 0, 0]);
+});
+
+test('timeline miesięczny i dzienny', () => {
+  const rows = [{ t: new Date(2026, 1, 3).getTime(), artist: 'A', ms: 60000 }];
+  const m = A.timeline(rows, new Date(2026, 0, 15).getTime(), new Date(2026, 3, 1).getTime(), 'month', [{ key: 'A', match: () => true }]);
+  assert.deepEqual(m.series[0].values, [0, 1, 0]);
+  const d = A.timeline(rows, new Date(2026, 1, 1).getTime(), new Date(2026, 1, 8).getTime(), 'day', [{ key: 'A', match: () => true }]);
+  assert.equal(d.buckets.length, 7);
+  assert.deepEqual(d.series[0].values, [0, 0, 1, 0, 0, 0, 0]);
+});
+
+test('artistDetails', () => {
+  const { rows } = A.normalizeRows([
+    ext('2025-01-01T10:00:00Z', 'A', 'S1', 200000),
+    ext('2026-01-01T10:00:00Z', 'A', 'S2', 100000),
+    ext('2026-01-02T10:00:00Z', 'B', 'S3', 100000)
+  ]);
+  const d = A.artistDetails(rows, 'A');
+  assert.equal(d.plays, 2);
+  assert.equal(d.tracks, 2);
+  assert.equal(d.first, Date.parse('2025-01-01T10:00:00Z'));
+  assert.equal(d.topTracks[0].name, 'S1');
+});
+
+test('ten sam utwór pod dwoma URI (singiel + album) liczy się razem', () => {
+  const { rows } = A.normalizeRows([
+    ext('2026-01-01T10:00:00Z', 'A', 'Song', 100000, { spotify_track_uri: 'spotify:track:single' }),
+    ext('2026-01-02T10:00:00Z', 'A', 'Song', 100000, { spotify_track_uri: 'spotify:track:album' })
+  ]);
+  const tracks = A.top(rows, 'track');
+  assert.equal(tracks.length, 1);
+  assert.equal(tracks[0].plays, 2);
 });
