@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=17" />
+    <link rel="stylesheet" href="./styles.css?v=18" />
   </head>
   <body>
     <div class="layout">
@@ -49,6 +49,7 @@
             <p id="hero-sub" class="hero-sub"></p>
           </div>
           <div class="hero-actions" id="topbar-actions">
+            <button id="btn-cloud" class="btn btn--outline btn--sm" type="button" title="Zapisz eksport na GitHubie, żeby był na każdym urządzeniu">☁ Zapisz na GitHubie</button>
             <label class="btn btn--outline btn--sm" title="Wczytaj eksport Spotify dla tego konta (zastąpi poprzedni)">
               ↺ Importuj eksport
               <input id="reimport-files" type="file" accept=".zip,.json,application/json,application/zip" multiple class="sr-only" />
@@ -56,6 +57,35 @@
             <button id="btn-clear-data" class="btn btn--ghost btn--sm" type="button" title="Usuń eksport tego konta z przeglądarki">Usuń eksport</button>
           </div>
         </header>
+
+        <!-- ─── ZAPIS NA GITHUBIE ────────────────────────────── -->
+        <section id="cloud-panel" class="cloud-panel hidden" aria-label="Zapis eksportu na GitHubie">
+          <div class="cloud-panel__head">
+            <h2 class="section-title">Zapis na GitHubie</h2>
+            <button id="cloud-close" class="btn btn--ghost btn--sm" type="button">Zamknij</button>
+          </div>
+          <p class="cloud-panel__lead">Eksport zapisze się w repozytorium (gałąź <code>dane</code>) i będzie wczytywał się sam na każdym urządzeniu, bez ponownego wgrywania.
+            <strong>Uwaga: dane (utwór, wykonawca, album, godzina) będą publiczne</strong> — tak samo jak odsłuchy z automatu.</p>
+          <div id="cloud-token-box">
+            <ol class="cloud-steps">
+              <li>Otwórz <a id="cloud-token-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">tworzenie tokenu na GitHubie</a>.</li>
+              <li>Nazwa dowolna, ważność np. rok. <b>Repository access → Only select repositories → SpotiStats2.0</b>.</li>
+              <li><b>Permissions → Repository permissions → Contents → Read and write</b>. Kliknij „Generate token” i skopiuj go.</li>
+              <li>Wklej token poniżej. Zostaje <b>tylko w tej przeglądarce</b> (nikt inny go nie zobaczy).</li>
+            </ol>
+            <input id="cloud-token" class="field-input" type="password" placeholder="github_pat_…" autocomplete="off" spellcheck="false" />
+          </div>
+          <div id="cloud-name-box" class="cloud-name hidden">
+            <label for="cloud-name">Nazwa tego konta w pasku bocznym</label>
+            <input id="cloud-name" class="field-input" type="text" maxlength="40" placeholder="np. Kasia" autocomplete="off" />
+          </div>
+          <div class="cloud-actions">
+            <button id="cloud-send" class="btn btn--primary btn--sm" type="button">Zapisz na GitHubie</button>
+            <button id="cloud-forget" class="btn btn--ghost btn--sm hidden" type="button">Zapomnij token</button>
+            <button id="cloud-remove" class="btn btn--ghost btn--sm hidden" type="button">Usuń z GitHuba</button>
+          </div>
+          <p id="cloud-status" class="cloud-status" role="status" aria-live="polite"></p>
+        </section>
 
         <!-- ─── IMPORT / PUSTE KONTO ─────────────────────────── -->
         <section id="state-empty" class="state-empty hidden">
@@ -218,9 +248,10 @@
     </nav>
 
     <script src="./jszip.min.js"></script>
-    <script src="./analytics.js?v=17"></script>
-    <script src="./charts.js?v=17"></script>
-    <script src="./live.js?v=17"></script>
-    <script src="./app.js?v=17"></script>
+    <script src="./analytics.js?v=18"></script>
+    <script src="./charts.js?v=18"></script>
+    <script src="./cloud.js?v=18"></script>
+    <script src="./live.js?v=18"></script>
+    <script src="./app.js?v=18"></script>
   </body>
 </html>

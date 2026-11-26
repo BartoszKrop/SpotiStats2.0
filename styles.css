@@ -397,3 +397,18 @@ button { font: inherit; color: inherit; }
 .rec-val b { font-size: 0.9rem; }
 .rec-val small { font-size: 0.72rem; color: var(--text-3); }
 @media (max-width: 900px) { .records { grid-template-columns: minmax(0, 1fr); gap: 1.2rem; } }
+
+/* Zapis na GitHubie */
+.cloud-panel { margin: 1rem 2rem 0; padding: 1.2rem 1.4rem 1.3rem; background: var(--card); border-radius: var(--radius); display: flex; flex-direction: column; gap: 0.8rem; }
+.cloud-panel__head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.cloud-panel__lead { color: var(--text-2); font-size: 0.9rem; }
+.cloud-panel__lead strong { color: var(--text); }
+.cloud-steps { padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.9rem; color: var(--text-2); margin-bottom: 0.7rem; }
+.cloud-steps a { color: var(--green); }
+.cloud-steps b { color: var(--text); font-weight: 700; }
+.cloud-name label { display: block; font-size: 0.8rem; font-weight: 700; color: var(--text-2); margin-bottom: 0.3rem; }
+.cloud-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.cloud-status { font-size: 0.85rem; color: var(--text-2); min-height: 1.2em; }
+.cloud-status--error { color: #f15e6c; }
+.cloud-panel code { background: var(--elev); padding: 0.05rem 0.35rem; border-radius: 4px; font-size: 0.85em; }
+@media (max-width: 900px) { .cloud-panel { margin: 1rem 1rem 0; padding: 1rem; } }
