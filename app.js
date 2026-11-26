@@ -45,6 +45,7 @@
     artistSpan: 'range', // wykres wykonawcy domyślnie trzyma się wybranego okresu
     artistUnit: null,
     recordsKind: 'artist',
+    saveWarning: '',
     showMore: false, // topki: 10 pozycji albo 25
     kingsUnit: null, // null = automatycznie (tygodnie do roku, dłużej miesiące)
     slot: 1,
@@ -138,9 +139,19 @@
         return;
       }
       const meta = { ...report, errors, importedAt: Date.now() };
-      await saveData(state.slot, { rows, meta });
       setData(rows, meta);
       status.textContent = '';
+      state.saveWarning = '';
+      try {
+        await saveData(state.slot, { rows, meta });
+        // Sprawdzamy, czy przeglądarka faktycznie zapamiętała dane (okienka innych aplikacji potrafią je gubić).
+        const back = await loadData(state.slot);
+        if (!back || !back.rows || back.rows.length !== rows.length) throw new Error('niezapisane');
+        if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+      } catch {
+        state.saveWarning = 'Ta przeglądarka nie zapamiętała wgranego eksportu, więc po zamknięciu strony trzeba będzie go wgrać ponownie. Otwórz stronę w Safari/Chrome (nie z okienka innej aplikacji) i wgraj plik jeszcze raz.';
+      }
+      render();
     } catch (err) {
       status.classList.add('import-status--error');
       status.textContent = `Błąd: ${err.message}`;
@@ -299,6 +310,7 @@
     if (state.liveAdded) parts.push(`w tym ${nf.format(state.liveAdded)} z automatu`);
     if (m.podcasts) parts.push(`${nf.format(m.podcasts)} podcastów pominiętych`);
     if (m.duplicates) parts.push(`${nf.format(m.duplicates)} duplikatów usuniętych`);
+    if (m.importedAt && !m.demo) parts.push(`eksport zapisany w tej przeglądarce (wgrany ${fmtDate(m.importedAt)})`);
     document.getElementById('data-info').textContent = parts.join(' · ');
     document.getElementById('data-info').title = m.usedFiles ? `Wczytane pliki:\n${m.usedFiles.join('\n')}` : '';
 
@@ -891,6 +903,12 @@
 
   function renderLiveBanner() {
     const el = document.getElementById('live-banner');
+    if (state.saveWarning) {
+      el.textContent = `⚠️ ${state.saveWarning}`;
+      el.classList.remove('hidden');
+      el.classList.add('live-banner--warn');
+      return;
+    }
     const L = window.SpotiLive;
     const s = state.accounts ? accountOf(state.slot) : null;
     let html = '';
