@@ -138,7 +138,7 @@
 
         L.loadStatus().then((s) => {
           const el = $('status-text');
-          if (q.has('code')) return; // nie zasłaniaj instrukcji
+          if (q.has('code') && !(s && s.connectedAt)) { el.textContent = 'Zalogowano w Spotify — przekaż kod do GitHuba (karta niżej).'; return; }
           if (!s || !s.connectedAt) {
             el.innerHTML = '⚪ Jeszcze nie połączono. Wykonaj kroki poniżej.';
             return;
@@ -154,7 +154,7 @@
               (left > 14 ? `Logowanie ważne jeszcze ok. ${left} dni.` : `⚠️ Logowanie wygaśnie za ok. ${Math.max(left, 0)} dni — zaloguj się ponownie.`);
           }
         }).catch(() => {
-          if (!q.has('code')) $('status-text').textContent = 'Nie udało się sprawdzić stanu (brak połączenia z GitHubem?).';
+          $('status-text').textContent = q.has('code') ? 'Zalogowano w Spotify — przekaż kod do GitHuba (karta niżej).' : 'Nie udało się sprawdzić stanu (brak połączenia z GitHubem?).';
         });
       })();
     </script>
