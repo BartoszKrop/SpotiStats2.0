@@ -34,7 +34,7 @@ button { font: inherit; }
 .btn {
   font-weight: 600; font-size: 0.9rem; border: 1px solid transparent; border-radius: var(--radius-sm);
   padding: 0.6rem 1.1rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;
-  white-space: nowrap; line-height: 1.2; transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap; line-height: 1.2; text-decoration: none; transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .btn--ghost { background: transparent; border-color: var(--border-mid); color: var(--text-muted); }
 .btn--ghost:hover { color: var(--text); background: var(--surface-hover); }
@@ -186,3 +186,18 @@ button { font: inherit; }
   .card-controls { width: 100%; }
   .import-hero__title { font-size: 1.4rem; }
 }
+
+/* ── Strona połączenia ze Spotify / baner automatu ──────── */
+.setup { max-width: 760px; margin: 0 auto; padding: 2rem 1.25rem 4rem; display: flex; flex-direction: column; gap: 1rem; }
+.setup-title { font-size: 1.6rem; letter-spacing: -0.02em; }
+.setup-lead { color: var(--text-muted); line-height: 1.6; }
+.setup a, .live-banner a { color: var(--accent); }
+.setup-status { line-height: 1.6; }
+.setup-steps { padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.9rem; line-height: 1.6; font-size: 0.93rem; }
+.setup-note { display: block; font-size: 0.8rem; color: var(--text-muted); margin-top: 0.3rem; }
+.copy-row { display: flex; gap: 0.5rem; margin: 0.4rem 0; flex-wrap: wrap; }
+.copy-row .field-input { flex: 1; min-width: 0; font-family: ui-monospace, monospace; font-size: 0.8rem; }
+.btn--primary { background: var(--accent); color: #061a0d; }
+.btn--primary:hover { background: #22f06a; }
+.live-banner { font-size: 0.85rem; line-height: 1.5; padding: 0.7rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-mid); background: var(--surface); color: var(--text-muted); }
+.live-banner--warn { border-color: rgba(255, 170, 60, 0.45); color: var(--text); }

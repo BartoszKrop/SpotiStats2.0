@@ -1,0 +1,66 @@
+name: Spotify – dociąganie odsłuchów
+
+on:
+  schedule:
+    # Co godzinę (Spotify oddaje tylko 50 ostatnich utworów, więc trzeba pytać często).
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      code:
+        description: 'Kod ze strony spotify.html (tylko przy pierwszym połączeniu albo po wygaśnięciu logowania). Puste = zwykła synchronizacja.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: spotify-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: app
+
+      - name: Pobierz gałąź „dane”
+        run: |
+          if git ls-remote --exit-code --heads "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" dane >/dev/null; then
+            git clone --depth 1 --branch dane "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" dane
+          else
+            mkdir dane && cd dane && git init -q -b dane
+            git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Połącz ze Spotify
+        if: ${{ inputs.code != '' && inputs.code != null }}
+        env:
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+          SPOTIFY_CODE: ${{ inputs.code }}
+        run: node app/scripts/spotify-sync.mjs connect dane
+
+      - name: Dociągnij ostatnie odsłuchy
+        if: ${{ inputs.code == '' || inputs.code == null }}
+        env:
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+        run: node app/scripts/spotify-sync.mjs sync dane
+
+      - name: Zapisz zmiany na gałęzi „dane”
+        if: always()
+        working-directory: dane
+        run: |
+          git add -A
+          if git diff --cached --quiet; then echo "Bez zmian."; exit 0; fi
+          git -c user.name="spotistats-bot" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Odsłuchy $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q origin HEAD:dane

@@ -7,12 +7,24 @@ Statystyki słuchania Spotify w stylu stats.fm, liczone z **pełnego eksportu hi
 ## Co potrafi
 
 - **Zakresy:** 7 dni, 28 dni, pół roku, wybrany rok kalendarzowy, cały czas.
-  7/28 dni i pół roku liczone są wstecz od **ostatniego odsłuchu w eksporcie** (eksport bywa sprzed kilku tygodni, więc „od dziś” dawałoby pusto).
+  7/28 dni i pół roku liczone są wstecz od **ostatniego odsłuchu w danych** (eksport bywa sprzed kilku tygodni, więc „od dziś” dawałoby pusto).
 - **Top 10** wykonawców, utworów i albumów — sortowanie wg czasu albo wg liczby odtworzeń.
 - **Top 10 w czasie** — wykres liniowy minut słuchania (dni / tygodnie / miesiące) dla top 10 wykonawców albo utworów z wybranego zakresu; legenda pozwala włączać i wyłączać linie.
 - **Wykonawca w czasie** — wykres dowolnego wykonawcy (wyszukiwarka albo klik w topce), cały czas lub wybrany zakres, do tego jego najczęściej słuchane utwory.
 - Podcasty, audiobooki i wpisy bez wykonawcy są **pomijane**. Duplikaty z nakładających się plików są usuwane.
 - „Odtworzenie” liczy się od 30 s słuchania (jak w stats.fm); minuty liczą się zawsze.
+
+## Automatyczne dociąganie nowych odsłuchów
+
+Jak w stats.fm: eksport wczytujesz raz, a nowe odsłuchy dociągają się same.
+
+- Workflow `.github/workflows/spotify-sync.yml` co godzinę pyta Spotify o 50 ostatnich utworów (`/me/player/recently-played`) i dopisuje nowe do `odsluchy/<rok>.json` na gałęzi **`dane`** (publicznej, jak profil stats.fm).
+- Strona przy otwarciu pobiera te pliki i dokłada odsłuchy **nowsze niż koniec eksportu**, więc nic się nie dubluje. Świeży eksport zawsze ma pierwszeństwo.
+- Refresh token leży na gałęzi `dane` zaszyfrowany (AES-256-GCM) kluczem z sekretu `SPOTIFY_CLIENT_SECRET`.
+- API nie mówi, ile utworu faktycznie słuchano (zwraca tylko te grane ≥30 s), więc przyjmowana jest jego pełna długość.
+- Spotify unieważnia logowanie po ok. 6 miesiącach — strona pokaże baner i trzeba zalogować się ponownie.
+
+Konfiguracja krok po kroku jest na podstronie **`spotify.html`** (link „⟳ Automat” w górnym pasku). W skrócie: aplikacja na developer.spotify.com (wymaga Premium), dwa sekrety w repo (`SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`), logowanie na `spotify.html` i przekazanie kodu do workflow przez **Run workflow**.
 
 ## Jak zdobyć dane
 
@@ -45,6 +57,9 @@ node --test
 | `analytics.js` | czyste funkcje: normalizacja, zakresy, topki, osie czasu |
 | `charts.js` | wykres liniowy w SVG |
 | `jszip.min.js` | odczyt .zip (lokalnie, bez CDN) |
+| `live.js` | odczyt dociągniętych odsłuchów z gałęzi `dane` |
+| `spotify.html` | jednorazowe połączenie automatu ze Spotify |
+| `scripts/spotify-sync.mjs` | skrypt automatu (GitHub Actions) |
 
 ## Dalsze pomysły
 

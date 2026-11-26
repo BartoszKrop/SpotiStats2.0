@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=3" />
+    <link rel="stylesheet" href="./styles.css?v=4" />
   </head>
   <body>
     <nav class="topbar" aria-label="Nawigacja">
@@ -19,6 +19,7 @@
           ↺ Importuj ponownie
           <input id="reimport-files" type="file" accept=".zip,.json,application/json,application/zip" multiple class="sr-only" />
         </label>
+        <a class="btn btn--ghost btn--sm" href="./spotify.html" title="Automatyczne dociąganie odsłuchów">⟳ Automat</a>
         <button id="btn-clear-data" class="btn btn--ghost btn--sm btn--danger" type="button">✕ Usuń dane</button>
       </div>
     </nav>
@@ -44,7 +45,8 @@
 
         <p id="import-status" class="import-status" role="status" aria-live="polite"></p>
         <button id="btn-load-demo" class="btn btn--ghost btn--sm" type="button">Pokaż na danych przykładowych</button>
-        <p class="import-note">Dane zostają w tej przeglądarce (IndexedDB). Nic nie jest wysyłane na serwer.</p>
+        <p class="import-note">Eksport zostaje w tej przeglądarce (IndexedDB). Nic nie jest wysyłane na serwer.</p>
+        <p class="import-note"><a href="./spotify.html" style="color:var(--accent)">Automatyczne dociąganie nowych odsłuchów →</a></p>
       </div>
     </main>
 
@@ -66,6 +68,7 @@
         </div>
       </div>
       <p id="range-label" class="range-label"></p>
+      <p id="live-banner" class="live-banner hidden" role="status"></p>
 
       <section id="kpi-row" class="kpi-row" aria-label="Podsumowanie"></section>
 
@@ -126,8 +129,9 @@
     </main>
 
     <script src="./jszip.min.js"></script>
-    <script src="./analytics.js?v=3"></script>
-    <script src="./charts.js?v=3"></script>
-    <script src="./app.js?v=3"></script>
+    <script src="./analytics.js?v=4"></script>
+    <script src="./charts.js?v=4"></script>
+    <script src="./live.js?v=4"></script>
+    <script src="./app.js?v=4"></script>
   </body>
 </html>

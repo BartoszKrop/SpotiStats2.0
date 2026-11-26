@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Połączenie ze Spotify</title>
+    <link rel="stylesheet" href="./styles.css?v=4" />
+  </head>
+  <body>
+    <nav class="topbar">
+      <a class="topbar-brand" href="./" style="color:inherit;text-decoration:none">
+        <span class="logo-icon" aria-hidden="true">◎</span>
+        <span class="logo-text">SpotiStats</span>
+      </a>
+      <a class="btn btn--ghost btn--sm" href="./">← Wróć do statystyk</a>
+    </nav>
+
+    <main class="setup">
+      <h1 class="setup-title">Automatyczne dociąganie odsłuchów</h1>
+      <p class="setup-lead">Co godzinę GitHub Actions pyta Spotify o ostatnie 50 utworów i dopisuje nowe do gałęzi <code>dane</code>. Strona łączy je z Twoim eksportem.</p>
+
+      <section class="card" id="status-card">
+        <h2 class="card-title">Stan</h2>
+        <p id="status-text" class="setup-status">Sprawdzam…</p>
+      </section>
+
+      <section class="card" id="code-card" hidden>
+        <h2 class="card-title">Krok 4 — przekaż kod do GitHuba (masz 10 minut)</h2>
+        <p>Zalogowano. Skopiuj kod:</p>
+        <div class="copy-row">
+          <input id="code-value" class="field-input" readonly />
+          <button id="code-copy" class="btn btn--ghost btn--sm" type="button">Kopiuj</button>
+        </div>
+        <ol class="setup-steps">
+          <li>Otwórz <a id="actions-link" target="_blank" rel="noopener">workflow „Spotify – dociąganie odsłuchów”</a>.</li>
+          <li>Kliknij <b>Run workflow</b> (po prawej), wklej kod w pole i kliknij zielone <b>Run workflow</b>.</li>
+          <li>Po ok. minucie odśwież tę stronę — stan powinien być zielony.</li>
+        </ol>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">Konfiguracja (jednorazowo)</h2>
+        <ol class="setup-steps">
+          <li>
+            Wejdź na <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>,
+            zaloguj się i kliknij <b>Create app</b>. Nazwa i opis dowolne (np. „SpotiStats”).
+            W <b>Redirect URIs</b> wklej dokładnie:
+            <div class="copy-row"><input id="redirect-uri" class="field-input" readonly /><button id="redirect-copy" class="btn btn--ghost btn--sm" type="button">Kopiuj</button></div>
+            i kliknij <b>Add</b>. W „Which API/SDKs are you planning to use?” zaznacz <b>Web API</b>, zaakceptuj warunki i <b>Save</b>.
+            <span class="setup-note">Spotify wymaga, żeby właściciel aplikacji miał Premium.</span>
+          </li>
+          <li>
+            W aplikacji wejdź w <b>Settings</b>, skopiuj <b>Client ID</b> i (po kliknięciu „View client secret”) <b>Client secret</b>.
+            Na GitHubie otwórz <a id="secrets-link" target="_blank" rel="noopener">Settings → Secrets and variables → Actions</a>
+            i dodaj dwa sekrety przyciskiem <b>New repository secret</b>:
+            <code>SPOTIFY_CLIENT_ID</code> oraz <code>SPOTIFY_CLIENT_SECRET</code>.
+          </li>
+          <li>
+            Wklej tu Client ID (sekretu tu nie podawaj) i zaloguj się:
+            <form id="login-form" class="copy-row">
+              <input id="client-id" class="field-input" placeholder="Client ID" autocomplete="off" spellcheck="false" required pattern="[0-9a-fA-F]{32}" title="32 znaki 0-9 a-f" />
+              <button class="btn btn--primary btn--sm" type="submit">Zaloguj przez Spotify</button>
+            </form>
+          </li>
+          <li>Po powrocie pojawi się kod do przekazania GitHubowi (karta wyżej).</li>
+        </ol>
+        <p class="setup-note">To samo robisz co ok. 6 miesięcy — Spotify unieważnia wtedy logowanie, a strona statystyk Ci o tym przypomni.</p>
+      </section>
+    </main>
+
+    <script src="./live.js?v=4"></script>
+    <script>
+      (function () {
+        'use strict';
+        const L = window.SpotiLive;
+        const CLIENT_KEY = 'ss_spotify_client_id';
+        const STATE_KEY = 'ss_spotify_state';
+        // Musi być identyczny jak w workflow (scripts/spotify-sync.mjs → redirectUri), więc na github.io budujemy go z nazwy repo.
+        const redirectUri = /\.github\.io$/i.test(location.hostname)
+          ? `https://${location.hostname.toLowerCase()}/${L.repo().split('/')[1]}/spotify.html`
+          : location.origin + location.pathname;
+        const $ = (id) => document.getElementById(id);
+
+        $('redirect-uri').value = redirectUri;
+        $('actions-link').href = L.actionsUrl();
+        $('secrets-link').href = `https://github.com/${L.repo()}/settings/secrets/actions`;
+        try { $('client-id').value = localStorage.getItem(CLIENT_KEY) || ''; } catch {}
+
+        function copy(inputId, btnId) {
+          $(btnId).addEventListener('click', async () => {
+            const v = $(inputId).value;
+            try { await navigator.clipboard.writeText(v); } catch { $(inputId).select(); document.execCommand('copy'); }
+            $(btnId).textContent = 'Skopiowano ✓';
+            setTimeout(() => ($(btnId).textContent = 'Kopiuj'), 1500);
+          });
+        }
+        copy('redirect-uri', 'redirect-copy');
+        copy('code-value', 'code-copy');
+
+        $('login-form').addEventListener('submit', (e) => {
+          e.preventDefault();
+          const clientId = $('client-id').value.trim();
+          const state = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+          try { localStorage.setItem(CLIENT_KEY, clientId); sessionStorage.setItem(STATE_KEY, state); } catch {}
+          const params = new URLSearchParams({
+            client_id: clientId,
+            response_type: 'code',
+            redirect_uri: redirectUri,
+            scope: 'user-read-recently-played',
+            state,
+            show_dialog: 'true'
+          });
+          location.href = `https://accounts.spotify.com/authorize?${params}`;
+        });
+
+        // Powrót ze Spotify
+        const q = new URLSearchParams(location.search);
+        if (q.has('code') || q.has('error')) {
+          let expected = null;
+          try { expected = sessionStorage.getItem(STATE_KEY); sessionStorage.removeItem(STATE_KEY); } catch {}
+          history.replaceState(null, '', location.pathname);
+          if (q.get('error')) {
+            $('status-text').textContent = `Spotify zwrócił błąd: ${q.get('error')}. Spróbuj jeszcze raz.`;
+          } else if (!expected || q.get('state') !== expected) {
+            $('status-text').textContent = 'Nie zgadza się parametr bezpieczeństwa (state). Zaloguj się jeszcze raz z tej strony.';
+          } else {
+            $('code-value').value = q.get('code');
+            $('code-card').hidden = false;
+            $('code-card').scrollIntoView();
+          }
+        }
+
+        function fmt(iso) {
+          return iso ? new Date(iso).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+        }
+
+        L.loadStatus().then((s) => {
+          const el = $('status-text');
+          if (q.has('code')) return; // nie zasłaniaj instrukcji
+          if (!s || !s.connectedAt) {
+            el.innerHTML = '⚪ Jeszcze nie połączono. Wykonaj kroki poniżej.';
+            return;
+          }
+          const age = L.tokenAgeDays(s);
+          const left = Math.round(L.TOKEN_LIFETIME_DAYS - age);
+          if (s.error === 'invalid_grant') {
+            el.innerHTML = '🔴 Logowanie do Spotify wygasło albo zostało cofnięte. Zaloguj się ponownie (krok 3) i przekaż nowy kod.';
+          } else if (s.error) {
+            el.textContent = `🟠 Ostatnia próba (${fmt(s.errorAt)}) się nie udała: ${s.error}`;
+          } else {
+            el.innerHTML = `🟢 Działa. Ostatnia synchronizacja: <b>${fmt(s.lastSync)}</b>, ostatni utwór: <b>${fmt(s.lastPlayedAt)}</b>. ` +
+              (left > 14 ? `Logowanie ważne jeszcze ok. ${left} dni.` : `⚠️ Logowanie wygaśnie za ok. ${Math.max(left, 0)} dni — zaloguj się ponownie.`);
+          }
+        }).catch(() => {
+          if (!q.has('code')) $('status-text').textContent = 'Nie udało się sprawdzić stanu (brak połączenia z GitHubem?).';
+        });
+      })();
+    </script>
+  </body>
+</html>
