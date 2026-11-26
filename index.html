@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=19" />
+    <link rel="stylesheet" href="./styles.css?v=20" />
   </head>
   <body>
     <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -62,8 +62,8 @@
           </div>
           <div class="hero-actions" id="topbar-actions">
             <button id="btn-cloud" class="btn btn--outline btn--sm" type="button" title="Zapisz eksport na GitHubie, żeby był na każdym urządzeniu"><svg class="ico ico--sm" aria-hidden="true"><use href="#i-cloud"/></svg>Zapisz na GitHubie</button>
-            <label class="btn btn--outline btn--sm" title="Wczytaj eksport Spotify dla tego konta (zastąpi poprzedni)">
-              ↺ Importuj eksport
+            <label class="btn btn--outline btn--sm" title="Dodaj nowszy eksport Spotify — dołoży się do dotychczasowych danych, bez dublowania">
+              ↺ Dodaj nowszy eksport
               <input id="reimport-files" type="file" accept=".zip,.json,application/json,application/zip" multiple class="sr-only" />
             </label>
             <button id="btn-clear-data" class="btn btn--ghost btn--sm" type="button" title="Usuń eksport tego konta z przeglądarki">Usuń eksport</button>
@@ -265,10 +265,10 @@
     </nav>
 
     <script src="./jszip.min.js"></script>
-    <script src="./analytics.js?v=19"></script>
-    <script src="./charts.js?v=19"></script>
-    <script src="./cloud.js?v=19"></script>
-    <script src="./live.js?v=19"></script>
-    <script src="./app.js?v=19"></script>
+    <script src="./analytics.js?v=20"></script>
+    <script src="./charts.js?v=20"></script>
+    <script src="./cloud.js?v=20"></script>
+    <script src="./live.js?v=20"></script>
+    <script src="./app.js?v=20"></script>
   </body>
 </html>

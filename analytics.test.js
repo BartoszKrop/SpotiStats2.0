@@ -207,3 +207,13 @@ test('summary: liczy też albumy (bez pustych)', () => {
   assert.equal(r.albums, 1);
   assert.equal(r.artists, 2);
 });
+
+test('mergeRows: nowszy eksport dokłada brakujące odsłuchy bez duplikatów, wynik posortowany', () => {
+  const mk = (t, track, ms = 60000) => ({ t, artist: 'A', track, album: '', uri: '', ms });
+  const old = [mk(1000, 'x'), mk(2000, 'y')];
+  const fresh = [mk(2000, 'y'), mk(3000, 'z'), mk(500, 'w')]; // y się powtarza, w jest starsze
+  const r = A.mergeRows(old, fresh);
+  assert.deepEqual(r.map((x) => x.track), ['w', 'x', 'y', 'z']);
+  assert.equal(A.mergeRows(old, old).length, 2);
+  assert.equal(old.length, 2); // wejście nietknięte
+});

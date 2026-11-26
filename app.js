@@ -46,6 +46,7 @@
     artistUnit: null,
     recordsKind: 'artist',
     saveWarning: '',
+    importNote: '',
     cloudMsg: null, // { text, warn } — komunikat o zapisie na GitHubie
     cloudBusy: false,
     showMore: false, // topki: 10 pozycji albo 25
@@ -140,15 +141,26 @@
         if (errors.length) status.textContent += ` Błędy: ${errors.join('; ')}`;
         return;
       }
-      const meta = { ...report, errors, importedAt: Date.now() };
-      setData(rows, meta);
+      // Nowszy eksport dokłada się do wcześniejszych danych (bez dublowania) — nie trzeba trzymać starych plików.
+      const prev = state.exportRows.length && !(state.meta && state.meta.demo) ? state.exportRows : null;
+      const finalRows = prev ? A.mergeRows(prev, rows) : rows;
+      const added = prev ? finalRows.length - prev.length : 0;
+      if (prev && !added) {
+        status.textContent = '';
+        setCloudMsg('Ten eksport nie zawiera nic nowego — dotychczasowe dane zostały bez zmian.');
+        return;
+      }
+      state.importNote = prev ? `Dołączono ${nf.format(added)} nowych odsłuchów do wcześniejszych (razem ${nf.format(finalRows.length)}).` : '';
+      const meta = { ...report, errors, importedAt: Date.now(), ...(prev ? { merged: true, added } : {}) };
+      setData(finalRows, meta);
       status.textContent = '';
       state.saveWarning = '';
+      if (state.importNote) setCloudMsg(state.importNote);
       try {
-        await saveData(state.slot, { rows, meta });
+        await saveData(state.slot, { rows: finalRows, meta });
         // Sprawdzamy, czy przeglądarka faktycznie zapamiętała dane (okienka innych aplikacji potrafią je gubić).
         const back = await loadData(state.slot);
-        if (!back || !back.rows || back.rows.length !== rows.length) throw new Error('niezapisane');
+        if (!back || !back.rows || back.rows.length !== finalRows.length) throw new Error('niezapisane');
         if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
       } catch {
         state.saveWarning = 'Ta przeglądarka nie zapamiętała wgranego eksportu, więc po zamknięciu strony trzeba będzie go wgrać ponownie. Otwórz stronę w Safari/Chrome (nie z okienka innej aplikacji) i wgraj plik jeszcze raz.';
@@ -1045,7 +1057,8 @@
       document.getElementById('cloud-token').value = '';
       state.meta = { ...state.meta, importedAt: manifest.importedAt };
       try { await saveData(slot, { rows: state.exportRows, meta: state.meta }); } catch { /* ignoruj */ }
-      setCloudMsg('Zapisano na GitHubie. Na innych urządzeniach pojawi się po odświeżeniu strony (do kilku minut).');
+      setCloudMsg(`${state.importNote ? `${state.importNote} ` : ''}Zapisano na GitHubie. Na innych urządzeniach pojawi się po odświeżeniu strony (do kilku minut).`);
+      state.importNote = '';
       await reloadAccounts();
     } catch (err) {
       setCloudMsg(err.message || 'Nie udało się zapisać na GitHubie.', true);
