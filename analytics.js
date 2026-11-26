@@ -353,7 +353,58 @@
     return { hours, days, total, peakHour: argmax(hours), peakDay: argmax(days) };
   }
 
+  /**
+   * Rekordy z całej historii, tygodniami (poniedziałek–niedziela):
+   *  - leaders: kto ile tygodni był nr 1 (łącznie) i jaka była jego najdłuższa seria z rzędu,
+   *  - longest: najdłuższa seria tygodni z rzędu na szczycie,
+   *  - peaks: tygodnie z największym słuchaniem jednej pozycji (minuty).
+   * kind: 'artist' | 'track'. Tydzień bez żadnych odsłuchów przerywa serię.
+   */
+  function records(rows, kind, { limit = 5, sortBy = 'ms' } = {}) {
+    const keyOf = kind === 'artist' ? (r) => r.artist : (r) => trackKey(r);
+    const nameOf = kind === 'artist' ? (r) => r.artist : (r) => r.track;
+    const weeks = new Map(); // początek tygodnia -> Map(key -> {name, artist, ms, plays})
+    for (const r of rows) {
+      const w = bucketStart(r.t, 'week');
+      let m = weeks.get(w);
+      if (!m) weeks.set(w, (m = new Map()));
+      const k = keyOf(r);
+      let e = m.get(k);
+      if (!e) m.set(k, (e = { name: nameOf(r), artist: r.artist, ms: 0, plays: 0 }));
+      e.ms += r.ms;
+      if (r.ms >= MIN_STREAM_MS) e.plays++;
+    }
+    const metric = sortBy === 'plays' ? 'plays' : 'ms';
+    const starts = [...weeks.keys()].sort((a, b) => a - b);
+    const stat = new Map(); // key -> { name, artist, weeks, longest, longestFrom, run, runFrom }
+    const peaks = [];
+    let best = null;
+    let prevWeek = null, prevKey = null;
+    for (const w of starts) {
+      let leaderKey = null, leader = null;
+      for (const [k, e] of weeks.get(w)) {
+        peaks.push({ key: k, name: e.name, artist: e.artist, week: w, ms: e.ms, plays: e.plays });
+        if (!leader || e[metric] > leader[metric] || (e[metric] === leader[metric] && e.ms > leader.ms)) { leader = e; leaderKey = k; }
+      }
+      let st = stat.get(leaderKey);
+      if (!st) stat.set(leaderKey, (st = { key: leaderKey, name: leader.name, artist: leader.artist, weeks: 0, longest: 0, longestFrom: w, run: 0, runFrom: w }));
+      const continues = prevKey === leaderKey && prevWeek != null && nextBucket(prevWeek, 'week') === w;
+      if (continues) st.run++;
+      else { st.run = 1; st.runFrom = w; }
+      st.weeks++;
+      if (st.run > st.longest) { st.longest = st.run; st.longestFrom = st.runFrom; }
+      if (!best || st.longest > best.weeks) best = { key: leaderKey, name: st.name, artist: st.artist, weeks: st.longest, from: st.longestFrom };
+      prevKey = leaderKey;
+      prevWeek = w;
+    }
+    const leaders = [...stat.values()].sort((a, b) => b.weeks - a.weeks || b.longest - a.longest || a.name.localeCompare(b.name)).slice(0, limit)
+      .map((x) => ({ key: x.key, name: x.name, artist: x.artist, weeks: x.weeks, longest: x.longest, longestFrom: x.longestFrom }));
+    peaks.sort((a, b) => b[metric] - a[metric] || b.ms - a.ms || a.week - b.week);
+    return { totalWeeks: starts.length, leaders, longest: best, peaks: peaks.slice(0, limit) };
+  }
+
   const API = {
+    records,
     listeningHours,
     rankTimeline,
     MIN_STREAM_MS,

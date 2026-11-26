@@ -44,6 +44,7 @@
     artist: '',
     artistSpan: 'all',
     artistUnit: null,
+    recordsKind: 'artist',
     showMore: false, // topki: 10 pozycji albo 25
     kingsUnit: null, // null = automatycznie (tygodnie do roku, dłużej miesiące)
     slot: 1,
@@ -318,6 +319,7 @@
     renderTops(slice);
     renderKings(slice, from, to);
     renderWhen(slice);
+    renderRecords();
     renderTopChart(slice, from, to);
     renderArtist(from, to);
   }
@@ -403,6 +405,46 @@
     document.getElementById('top-artists-more').innerHTML = more(total('artist'));
     document.getElementById('top-tracks').innerHTML = trackList(tracks, 'track', previousRanks('track')) + more(total('track'));
     document.getElementById('top-albums').innerHTML = trackList(albums, 'album', previousRanks('album')) + more(total('album'));
+  }
+
+  // ─────────────────────────────────────────────────────── REKORDY
+  const plWeeks = (n) => `${nf.format(n)} ${n === 1 ? 'tydzień' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'tygodnie' : 'tygodni'}`;
+  const fmtWeek = (ms) => `tydzień od ${fmtDate(ms)}`;
+  let recordsCache = { rows: null, sortBy: null, data: {} };
+  function recordsFor(kind) {
+    if (recordsCache.rows !== state.rows || recordsCache.sortBy !== state.sortBy) recordsCache = { rows: state.rows, sortBy: state.sortBy, data: {} };
+    return (recordsCache.data[kind] ||= A.records(state.rows, kind, { limit: 5, sortBy: state.sortBy }));
+  }
+  function renderRecords() {
+    document.querySelectorAll('#records-kind button').forEach((b) => {
+      b.classList.toggle('is-active', b.dataset.kind === state.recordsKind);
+      b.setAttribute('aria-pressed', String(b.dataset.kind === state.recordsKind));
+    });
+    const kind = state.recordsKind;
+    const r = recordsFor(kind);
+    const el = document.getElementById('records-body');
+    if (!r.totalWeeks) { el.innerHTML = '<p class="no-data">Brak odsłuchów.</p>'; return; }
+    const av = (it, cls) => (kind === 'artist' ? artistAvatar(it.name, cls) : coverAvatar(`${it.name} ${it.artist}`, it.artist, it.album, cls));
+    const sub = (it) => (kind === 'track' ? `<span class="track-sub">${esc(it.artist)}</span>` : '');
+    const noun = kind === 'artist' ? 'wykonawca' : 'utwór';
+    const hero = r.longest;
+    const leaders = r.leaders.map((l, i) => `<li class="rec-row" data-artist="${esc(l.artist)}" tabindex="0" role="button">
+        <span class="track-rank">${i + 1}</span>
+        <span class="track-text"><span class="track-name">${esc(l.name)}</span>${sub(l)}</span>
+        <span class="rec-val"><b>${plWeeks(l.weeks)}</b><small>najdłużej z rzędu: ${l.longest}</small></span></li>`).join('');
+    const peaks = r.peaks.map((p, i) => `<li class="rec-row" data-artist="${esc(p.artist)}" tabindex="0" role="button">
+        <span class="track-rank">${i + 1}</span>
+        <span class="track-text"><span class="track-name">${esc(p.name)}</span><span class="track-sub">${kind === 'track' ? `${esc(p.artist)} · ` : ''}${fmtWeek(p.week)}</span></span>
+        <span class="rec-val"><b>${state.sortBy === 'plays' ? `${nf.format(p.plays)} odtw.` : `${nf.format(minutes(p.ms))} min`}</b><small>${state.sortBy === 'plays' ? `${nf.format(minutes(p.ms))} min` : `${nf.format(p.plays)} odtw.`}</small></span></li>`).join('');
+    el.innerHTML = `
+      <button type="button" class="rec-hero" data-artist="${esc(hero.artist)}">
+        <span class="rec-hero__label">Najdłuższa seria na nr 1 (${noun})</span>
+        <span class="rec-hero__main">${av(hero, 'avatar--lg')}<span><span class="rec-hero__name">${esc(hero.name)}</span>
+          <span class="rec-hero__val">${plWeeks(hero.weeks)} z rzędu</span>
+          <span class="rec-hero__sub">od ${fmtDate(hero.from)}</span></span></span>
+      </button>
+      <div class="rec-col"><h3 class="sub-title">Najwięcej tygodni na nr 1</h3><ol class="rec-list">${leaders}</ol></div>
+      <div class="rec-col"><h3 class="sub-title">Największe tygodnie</h3><ol class="rec-list">${peaks}</ol></div>`;
   }
 
   // ─────────────────────────────────────────────────────── KIEDY SŁUCHASZ
@@ -704,6 +746,17 @@
       state.showMore = !state.showMore;
       const { from, to } = currentBounds();
       renderTops(A.sliceRange(state.rows, from, to));
+    });
+
+    document.getElementById('records-kind').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      state.recordsKind = b.dataset.kind;
+      renderRecords();
+    });
+    document.getElementById('records-body').addEventListener('click', (e) => {
+      const el = e.target.closest('[data-artist]');
+      if (el) selectArtist(el.dataset.artist, true);
     });
 
     document.getElementById('kings-unit').addEventListener('click', (e) => {

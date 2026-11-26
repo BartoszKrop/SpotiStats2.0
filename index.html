@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#121212" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=13" />
+    <link rel="stylesheet" href="./styles.css?v=15" />
   </head>
   <body>
     <div class="layout">
@@ -20,6 +20,7 @@
         <nav class="side-nav" aria-label="Sekcje">
           <a href="#sec-top" class="side-link">Topki</a>
           <a href="#sec-kings" class="side-link">Nr 1 wykonawca</a>
+          <a href="#sec-records" class="side-link">Rekordy</a>
           <a href="#sec-when" class="side-link">Kiedy słuchasz</a>
           <a href="#sec-trend" class="side-link">Top 10 w czasie</a>
           <a href="#artist-card" class="side-link">Wykonawca</a>
@@ -133,6 +134,20 @@
             </div>
           </section>
 
+          <section id="sec-records" class="section card">
+            <div class="section-head">
+              <h2 class="section-title">Rekordy</h2>
+              <div class="card-controls">
+                <div class="seg" id="records-kind" role="group" aria-label="Co pokazać">
+                  <button type="button" data-kind="artist">Wykonawcy</button>
+                  <button type="button" data-kind="track">Utwory</button>
+                </div>
+              </div>
+            </div>
+            <div id="records-body" class="records"></div>
+            <p class="hint">Cała historia, tygodniami (poniedziałek–niedziela). Tydzień bez odsłuchów przerywa serię.</p>
+          </section>
+
           <section id="sec-when" class="section card">
             <div class="section-head"><h2 class="section-title">Kiedy słuchasz</h2><span id="when-summary" class="section-hint"></span></div>
             <div class="when">
@@ -189,15 +204,16 @@
     <nav class="bottom-nav" aria-label="Sekcje">
       <a href="#sec-top"><span class="bn-ico" aria-hidden="true">◉</span>Topki</a>
       <a href="#sec-kings"><span class="bn-ico" aria-hidden="true">♛</span>Nr 1</a>
+      <a href="#sec-records"><span class="bn-ico" aria-hidden="true">★</span>Rekordy</a>
       <a href="#sec-when"><span class="bn-ico" aria-hidden="true">◷</span>Kiedy</a>
       <a href="#sec-trend"><span class="bn-ico" aria-hidden="true">≈</span>Top 10</a>
       <a href="#artist-card"><span class="bn-ico" aria-hidden="true">♪</span>Wykonawca</a>
     </nav>
 
     <script src="./jszip.min.js"></script>
-    <script src="./analytics.js?v=13"></script>
-    <script src="./charts.js?v=13"></script>
-    <script src="./live.js?v=13"></script>
-    <script src="./app.js?v=13"></script>
+    <script src="./analytics.js?v=15"></script>
+    <script src="./charts.js?v=15"></script>
+    <script src="./live.js?v=15"></script>
+    <script src="./app.js?v=15"></script>
   </body>
 </html>
