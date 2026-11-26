@@ -1,0 +1,42 @@
+{
+ "lana del rey": {
+  "name": "Lana Del Rey",
+  "img": "https://i.scdn.co/image/ab6761610000f178b99cacf8acd5378206767261",
+  "at": "2026-11-26T19:06:22.108Z"
+ },
+ "taylor swift": {
+  "name": "Taylor Swift",
+  "img": "https://i.scdn.co/image/ab6761610000f17812184bdd29403de54cb9d9c7",
+  "at": "2026-11-26T19:06:22.108Z"
+ },
+ "gracie abrams": {
+  "name": "Gracie Abrams",
+  "img": "https://i.scdn.co/image/ab6761610000f178e1800836d95b63c49e60ea3b",
+  "at": "2026-11-26T19:06:22.108Z"
+ },
+ "arctic monkeys": {
+  "name": "Arctic Monkeys",
+  "img": "https://i.scdn.co/image/ab6761610000f1787da39dea0a72f581535fb11f",
+  "at": "2026-11-26T19:06:22.108Z"
+ },
+ "katy perry": {
+  "name": "Katy Perry",
+  "img": "https://i.scdn.co/image/ab6761610000f178cd50e745cf782f905769f482",
+  "at": "2026-11-26T19:06:22.108Z"
+ },
+ "tame impala": {
+  "name": "Tame Impala",
+  "img": "https://i.scdn.co/image/ab6761610000f178e412a782245eb20d9626c601",
+  "at": "2026-11-26T19:06:22.108Z"
+ },
+ "olivia rodrigo": {
+  "name": "Olivia Rodrigo",
+  "img": "https://i.scdn.co/image/ab6761610000f178b14eb4dcfd2f3858bed06e44",
+  "at": "2026-11-26T19:06:22.108Z"
+ },
+ "lorde": {
+  "name": "Lorde",
+  "img": "https://i.scdn.co/image/ab6761610000f17869f12b4d25517a2a8e9ba6e5",
+  "at": "2026-11-26T19:06:22.108Z"
+ }
+}
