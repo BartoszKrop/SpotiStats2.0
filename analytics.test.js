@@ -197,3 +197,13 @@ test('records: najdłuższa seria na nr 1, łączna liczba tygodni i największy
   assert.equal(tr.peaks[0].name, 'a2');
   assert.equal(tr.peaks[0].week, new Date(2026, 0, 26).getTime());
 });
+
+test('summary: liczy też albumy (bez pustych)', () => {
+  const r = A.summary([
+    { t: 1000, artist: 'A', track: 'x', album: 'LP', ms: 60000 },
+    { t: 2000, artist: 'A', track: 'y', album: 'LP', ms: 60000 },
+    { t: 3000, artist: 'B', track: 'z', album: '', ms: 60000 }
+  ], 0, 86_400_000);
+  assert.equal(r.albums, 1);
+  assert.equal(r.artists, 2);
+});
