@@ -1139,7 +1139,7 @@
   /** Podświetla w menu sekcję, którą akurat czytasz. */
   function wireScrollSpy() {
     if (!('IntersectionObserver' in window)) return;
-    const links = [...document.querySelectorAll('.side-link[href^="#"], .bottom-nav a[href^="#"]')];
+    const links = [...document.querySelectorAll('.side-link[href^="#"]')];
     const targets = [...new Set(links.map((l) => l.getAttribute('href').slice(1)))].map((id) => document.getElementById(id)).filter(Boolean);
     const visible = new Set();
     const mark = () => {
