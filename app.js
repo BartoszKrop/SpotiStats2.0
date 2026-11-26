@@ -288,6 +288,7 @@
     document.getElementById('state-empty').classList.toggle('hidden', has);
     document.getElementById('state-data').classList.toggle('hidden', !has);
     document.getElementById('topbar-actions').classList.toggle('hidden', !has);
+    document.body.classList.toggle('has-data', has);
     renderAccounts();
     renderLiveBanner();
     if (!has) { renderEmpty(); renderHero(null); return; }
@@ -863,9 +864,27 @@
     el.classList.toggle('live-banner--warn', warn);
   }
 
+  /** Podświetla w menu sekcję, którą akurat czytasz. */
+  function wireScrollSpy() {
+    if (!('IntersectionObserver' in window)) return;
+    const links = [...document.querySelectorAll('.side-link[href^="#"], .bottom-nav a[href^="#"]')];
+    const targets = [...new Set(links.map((l) => l.getAttribute('href').slice(1)))].map((id) => document.getElementById(id)).filter(Boolean);
+    const visible = new Set();
+    const mark = () => {
+      const first = targets.find((t) => visible.has(t.id));
+      links.forEach((l) => l.classList.toggle('is-active', Boolean(first) && l.getAttribute('href') === `#${first.id}`));
+    };
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) (e.isIntersecting ? visible.add(e.target.id) : visible.delete(e.target.id));
+      mark();
+    }, { rootMargin: '-25% 0px -60% 0px' });
+    targets.forEach((t) => io.observe(t));
+  }
+
   async function init() {
     loadPrefs();
     wire();
+    wireScrollSpy();
     renderAccounts();
     await loadSlot(state.slot);
     loadAccounts();
