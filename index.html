@@ -12,9 +12,21 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=18" />
+    <link rel="stylesheet" href="./styles.css?v=19" />
   </head>
   <body>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <defs>
+        <symbol id="i-top" viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+        <symbol id="i-crown" viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+        <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H4v1a3 3 0 0 0 4 2.8M16 6h4v1a3 3 0 0 1-4 2.8M12 13v4M8 20h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+        <symbol id="i-trend" viewBox="0 0 24 24"><path d="M3 17l5-6 4 4 8-9M15 6h5v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+        <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 20c1-4 4-6 8-6s7 2 8 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+        <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3l10 18H2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v5M12 18v.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+        <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.5-9A6 6 0 0 1 18 10a4 4 0 0 1-.5 8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+      </defs>
+    </svg>
     <div class="layout">
       <!-- ─── PASEK BOCZNY ─────────────────────────────────── -->
       <aside class="sidebar" aria-label="Nawigacja">
@@ -24,13 +36,13 @@
         </a>
 
         <nav class="side-nav" aria-label="Sekcje">
-          <a href="#sec-top" class="side-link">Topki</a>
-          <a href="#sec-kings" class="side-link">Nr 1 wykonawca</a>
-          <a href="#sec-records" class="side-link">Rekordy</a>
-          <a href="#sec-when" class="side-link">Kiedy słuchasz</a>
-          <a href="#sec-trend" class="side-link">Top 10 w czasie</a>
-          <a href="#artist-card" class="side-link">Wykonawca</a>
-          <a href="./spotify.html" class="side-link">Automat</a>
+          <a href="#sec-top" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-top"/></svg>Topki</a>
+          <a href="#sec-kings" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-crown"/></svg>Nr 1 wykonawca</a>
+          <a href="#sec-records" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-trophy"/></svg>Rekordy</a>
+          <a href="#sec-when" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg>Kiedy słuchasz</a>
+          <a href="#sec-trend" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-trend"/></svg>Top 10 w czasie</a>
+          <a href="#artist-card" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-user"/></svg>Wykonawca</a>
+          <a href="./spotify.html" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-cloud"/></svg>Automat</a>
         </nav>
 
         <div class="side-section">
@@ -49,7 +61,7 @@
             <p id="hero-sub" class="hero-sub"></p>
           </div>
           <div class="hero-actions" id="topbar-actions">
-            <button id="btn-cloud" class="btn btn--outline btn--sm" type="button" title="Zapisz eksport na GitHubie, żeby był na każdym urządzeniu">☁ Zapisz na GitHubie</button>
+            <button id="btn-cloud" class="btn btn--outline btn--sm" type="button" title="Zapisz eksport na GitHubie, żeby był na każdym urządzeniu"><svg class="ico ico--sm" aria-hidden="true"><use href="#i-cloud"/></svg>Zapisz na GitHubie</button>
             <label class="btn btn--outline btn--sm" title="Wczytaj eksport Spotify dla tego konta (zastąpi poprzedni)">
               ↺ Importuj eksport
               <input id="reimport-files" type="file" accept=".zip,.json,application/json,application/zip" multiple class="sr-only" />
@@ -106,7 +118,7 @@
             <div id="friend-help" class="friend-help hidden"></div>
             <button id="btn-load-demo" class="btn btn--ghost btn--sm" type="button">Pokaż na danych przykładowych</button>
             <p class="import-note">Eksport zostaje w tej przeglądarce i wczytuje się sam przy każdym wejściu — wgrywasz go tylko raz. Nic nie jest wysyłane na serwer.</p>
-            <p class="import-note">💡 Otwórz stronę w zwykłej przeglądarce (Safari / Chrome), a nie z okienka innej aplikacji, i dodaj ją do ekranu głównego — wtedy dane na pewno zostają.</p>
+            <p class="import-note">Wskazówka: otwórz stronę w zwykłej przeglądarce (Safari / Chrome), a nie z okienka innej aplikacji, i dodaj ją do ekranu głównego — wtedy dane na pewno zostają.</p>
           </div>
         </section>
 
@@ -147,6 +159,11 @@
             </div>
           </section>
 
+          <section id="sec-recent" class="section">
+            <div class="section-head"><h2 class="section-title">Ostatnio słuchane</h2><span class="section-hint">Niezależnie od wybranego okresu</span></div>
+            <div id="recent-list"></div>
+          </section>
+
           <section id="sec-kings" class="section card">
             <div class="section-head">
               <h2 class="section-title">Nr 1 wykonawca</h2>
@@ -160,7 +177,7 @@
             <div class="kings">
               <div class="kings-side">
                 <div id="kings-now" class="kings-now"></div>
-                <h3 class="sub-title">Najwięcej razy na szczycie</h3>
+                <h3 class="sub-title">Najczęściej na szczycie</h3>
                 <ol id="kings-list" class="kings-list"></ol>
               </div>
               <div class="kings-chart">
@@ -239,19 +256,19 @@
     </div>
 
     <nav class="bottom-nav" aria-label="Sekcje">
-      <a href="#sec-top"><span class="bn-ico" aria-hidden="true">◉</span>Topki</a>
-      <a href="#sec-kings"><span class="bn-ico" aria-hidden="true">♛</span>Nr 1</a>
-      <a href="#sec-records"><span class="bn-ico" aria-hidden="true">★</span>Rekordy</a>
-      <a href="#sec-when"><span class="bn-ico" aria-hidden="true">◷</span>Kiedy</a>
-      <a href="#sec-trend"><span class="bn-ico" aria-hidden="true">≈</span>Top 10</a>
-      <a href="#artist-card"><span class="bn-ico" aria-hidden="true">♪</span>Wykonawca</a>
+      <a href="#sec-top"><svg class="ico" aria-hidden="true"><use href="#i-top"/></svg>Topki</a>
+      <a href="#sec-kings"><svg class="ico" aria-hidden="true"><use href="#i-crown"/></svg>Nr 1</a>
+      <a href="#sec-records"><svg class="ico" aria-hidden="true"><use href="#i-trophy"/></svg>Rekordy</a>
+      <a href="#sec-when"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg>Kiedy</a>
+      <a href="#sec-trend"><svg class="ico" aria-hidden="true"><use href="#i-trend"/></svg>Top 10</a>
+      <a href="#artist-card"><svg class="ico" aria-hidden="true"><use href="#i-user"/></svg>Artysta</a>
     </nav>
 
     <script src="./jszip.min.js"></script>
-    <script src="./analytics.js?v=18"></script>
-    <script src="./charts.js?v=18"></script>
-    <script src="./cloud.js?v=18"></script>
-    <script src="./live.js?v=18"></script>
-    <script src="./app.js?v=18"></script>
+    <script src="./analytics.js?v=19"></script>
+    <script src="./charts.js?v=19"></script>
+    <script src="./cloud.js?v=19"></script>
+    <script src="./live.js?v=19"></script>
+    <script src="./app.js?v=19"></script>
   </body>
 </html>

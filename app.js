@@ -264,10 +264,10 @@
       const name = accountName(slot);
       const a = accountOf(slot);
       const active = slot === state.slot;
-      const sub = a.connectedAt ? (a.error ? 'automat: błąd' : 'automat działa') : a.export ? 'eksport na GitHubie' : name ? 'tylko eksport' : 'wolne miejsce';
+      const sub = a.connectedAt ? (a.error ? 'automat: błąd' : 'automat działa') : a.export ? 'eksport na GitHubie' : name ? 'tylko eksport' : 'dodaj konto';
       items.push(`<li><button type="button" class="account${active ? ' is-active' : ''}${name ? '' : ' is-empty'}" data-slot="${slot}" aria-current="${active}">
         ${name ? avatar(name, 'avatar--sm') : '<span class="avatar avatar--sm avatar--empty" aria-hidden="true">+</span>'}
-        <span class="account-text"><span class="account-name">${esc(name || `Wolne miejsce ${slot}`)}</span><span class="account-sub">${sub}</span></span>
+        <span class="account-text"><span class="account-name">${esc(name || `Miejsce ${slot}`)}</span><span class="account-sub">${sub}</span></span>
       </button></li>`);
     }
     list.innerHTML = items.join('');
@@ -337,6 +337,7 @@
     renderHero(sum);
     renderKpis(sum);
     renderTops(slice);
+    renderRecent();
     renderKings(slice, from, to);
     renderWhen(slice);
     renderRecords(slice, from, to);
@@ -364,6 +365,7 @@
       kpi('Odtworzenia', nf.format(s.plays), 'co najmniej 30 s'),
       kpi('Wykonawcy', nf.format(s.artists)),
       kpi('Utwory', nf.format(s.tracks)),
+      kpi('Albumy', nf.format(s.albums)),
       kpi('Średnio dziennie', `${nf.format(Math.round(s.minutesPerDay))} min`)
     ].join('');
   }
@@ -488,6 +490,29 @@
     document.getElementById('when-summary').textContent = r.total
       ? `Najwięcej słuchasz koło ${String(r.peakHour).padStart(2, '0')}:00, ${DAY_FULL[r.peakDay]}`
       : '';
+  }
+
+  // ─────────────────────────────────────────────────────── OSTATNIO SŁUCHANE
+  function agoLabel(ms) {
+    const min = Math.floor((Date.now() - ms) / 60_000);
+    if (min < 1) return 'przed chwilą';
+    if (min < 60) return `${min} min temu`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `${h} godz. temu`;
+    const d = new Date(ms);
+    const days = Math.floor(h / 24);
+    if (days === 1) return `wczoraj ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    if (days < 7) return `${days} dni temu`;
+    return fmtDate(ms);
+  }
+  function renderRecent() {
+    const el = document.getElementById('recent-list');
+    const out = [];
+    for (let i = state.rows.length - 1; i >= 0 && out.length < 10; i--) if (state.rows[i].ms >= 30_000) out.push(state.rows[i]);
+    el.innerHTML = out.length ? `<ol class="tracklist">${out.map((r) => `<li class="track-row track-row--recent" data-artist="${esc(r.artist)}" tabindex="0" role="button" title="Pokaż wykres: ${esc(r.artist)}">
+        ${coverAvatar(`${r.track} ${r.artist}`, r.artist, r.album, 'avatar--cover')}
+        <span class="track-text"><span class="track-name">${esc(r.track)}</span><span class="track-sub">${esc(r.artist)}</span></span>
+        <span class="track-val track-val--when">${agoLabel(r.t)}</span></li>`).join('')}</ol>` : '<p class="no-data">Brak odsłuchów.</p>';
   }
 
   // ─────────────────────────────────────────────────────── NR 1 TYGODNIA
@@ -757,7 +782,7 @@
       const el = e.target.closest('[data-artist]');
       if (el) selectArtist(el.dataset.artist, true);
     };
-    for (const id of ['top-artists', 'top-tracks', 'top-albums', 'kings-now', 'kings-list', 'artist-tracks-wrap']) {
+    for (const id of ['top-artists', 'top-tracks', 'top-albums', 'recent-list', 'kings-now', 'kings-list', 'artist-tracks-wrap']) {
       const el = document.getElementById(id);
       if (!el) continue;
       el.addEventListener('click', onArtistPick);
@@ -911,16 +936,18 @@
     } catch { /* bez zdjęć — zostają inicjały */ }
   }
 
+  const WARN_ICO = '<svg class="ico ico--sm" aria-hidden="true"><use href="#i-warn"/></svg>';
+  const CLOUD_ICO = '<svg class="ico ico--sm" aria-hidden="true"><use href="#i-cloud"/></svg>';
   function renderLiveBanner() {
     const el = document.getElementById('live-banner');
     if (state.cloudMsg) {
-      el.textContent = `${state.cloudMsg.warn ? '⚠️' : '☁'} ${state.cloudMsg.text}`;
+      el.innerHTML = `${state.cloudMsg.warn ? WARN_ICO : CLOUD_ICO} ${esc(state.cloudMsg.text)}`;
       el.classList.remove('hidden');
       el.classList.toggle('live-banner--warn', Boolean(state.cloudMsg.warn));
       return;
     }
     if (state.saveWarning) {
-      el.textContent = `⚠️ ${state.saveWarning}`;
+      el.innerHTML = `${WARN_ICO} ${esc(state.saveWarning)}`;
       el.classList.remove('hidden');
       el.classList.add('live-banner--warn');
       return;
@@ -935,17 +962,17 @@
       html = 'Nowe odsłuchy mogą się dociągać same — <a href="./spotify.html">włącz automat</a>.';
     } else if (s.error === 'invalid_grant') {
       warn = true;
-      html = `⚠️ Logowanie automatu do Spotify wygasło, więc nowe odsłuchy się nie dociągają. <a href="./spotify.html?konto=${state.slot}">Zaloguj się ponownie</a>.`;
+      html = `${WARN_ICO} Logowanie automatu do Spotify wygasło, więc nowe odsłuchy się nie dociągają. <a href="./spotify.html?konto=${state.slot}">Zaloguj się ponownie</a>.`;
     } else if (L.tokenAgeDays(s) > L.TOKEN_LIFETIME_DAYS - 14) {
       warn = true;
-      html = `⚠️ Logowanie automatu do Spotify wygaśnie za ok. ${Math.max(0, Math.round(L.TOKEN_LIFETIME_DAYS - L.tokenAgeDays(s)))} dni. <a href="./spotify.html?konto=${state.slot}">Odnów je</a>.`;
+      html = `${WARN_ICO} Logowanie automatu do Spotify wygaśnie za ok. ${Math.max(0, Math.round(L.TOKEN_LIFETIME_DAYS - L.tokenAgeDays(s)))} dni. <a href="./spotify.html?konto=${state.slot}">Odnów je</a>.`;
     } else if (s.error) {
       warn = true;
-      html = `⚠️ Ostatnia synchronizacja się nie udała. <a href="./spotify.html">Szczegóły</a>.`;
+      html = `${WARN_ICO} Ostatnia synchronizacja się nie udała. <a href="./spotify.html">Szczegóły</a>.`;
     } else if (s.lastSync) {
       const ago = Math.floor((Date.now() - Date.parse(s.lastSync)) / 3_600_000);
       warn = ago > 6;
-      html = `${warn ? '⚠️' : '<span class="live-dot"></span>'} Automat: ostatnia synchronizacja ${ago < 1 ? 'mniej niż godzinę' : `${ago} godz.`} temu` +
+      html = `${warn ? WARN_ICO : '<span class="live-dot"></span>'} Automat: ostatnia synchronizacja ${ago < 1 ? 'mniej niż godzinę' : `${ago} godz.`} temu` +
         (state.liveAdded ? `, dołożył ${nf.format(state.liveAdded)} odsłuchów${state.exportRows.length ? ' po końcu eksportu' : ''}.` : '.') +
         (warn ? ' Coś się zacięło — <a href="./spotify.html">sprawdź</a>.' : '');
     }

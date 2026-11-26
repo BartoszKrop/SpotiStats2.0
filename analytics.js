@@ -194,15 +194,16 @@
 
   function summary(rows, from, to) {
     let ms = 0, plays = 0;
-    const artists = new Set(), tracks = new Set();
+    const artists = new Set(), tracks = new Set(), albums = new Set();
     for (const r of rows) {
       ms += r.ms;
       if (r.ms >= MIN_STREAM_MS) plays++;
       artists.add(r.artist);
       tracks.add(trackKey(r));
+      if (r.album) albums.add(KEYERS.album(r));
     }
     const days = Math.max(1, Math.round((to - from) / DAY_MS));
-    return { ms, plays, artists: artists.size, tracks: tracks.size, minutesPerDay: ms / 60_000 / days };
+    return { ms, plays, artists: artists.size, tracks: tracks.size, albums: albums.size, minutesPerDay: ms / 60_000 / days };
   }
 
   // ────────────────────────────────────────────────────────── OSIE CZASU
