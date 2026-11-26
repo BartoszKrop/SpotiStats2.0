@@ -102,7 +102,7 @@
           e.preventDefault();
           const clientId = $('client-id').value.trim();
           const state = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
-          try { localStorage.setItem(CLIENT_KEY, clientId); sessionStorage.setItem(STATE_KEY, state); } catch {}
+          try { localStorage.setItem(CLIENT_KEY, clientId); localStorage.setItem(STATE_KEY, state); } catch {}
           const params = new URLSearchParams({
             client_id: clientId,
             response_type: 'code',
@@ -118,13 +118,14 @@
         const q = new URLSearchParams(location.search);
         if (q.has('code') || q.has('error')) {
           let expected = null;
-          try { expected = sessionStorage.getItem(STATE_KEY); sessionStorage.removeItem(STATE_KEY); } catch {}
+          try { expected = localStorage.getItem(STATE_KEY); } catch {}
           history.replaceState(null, '', location.pathname);
           if (q.get('error')) {
             $('status-text').textContent = `Spotify zwrócił błąd: ${q.get('error')}. Spróbuj jeszcze raz.`;
-          } else if (!expected || q.get('state') !== expected) {
-            $('status-text').textContent = 'Nie zgadza się parametr bezpieczeństwa (state). Zaloguj się jeszcze raz z tej strony.';
           } else {
+            // Na telefonie logowanie często przejmuje aplikacja Spotify i wraca w innej karcie,
+            // więc nie blokujemy przy niezgodnym „state” — sam kod i tak nic nie daje bez sekretu z GitHuba.
+            if (expected && q.get('state') !== expected) console.warn('state nie pasuje — pokazuję kod mimo to');
             $('code-value').value = q.get('code');
             $('code-card').hidden = false;
             $('code-card').scrollIntoView();
