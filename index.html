@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#121212" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=11" />
+    <link rel="stylesheet" href="./styles.css?v=12" />
   </head>
   <body>
     <div class="layout">
@@ -20,6 +20,7 @@
         <nav class="side-nav" aria-label="Sekcje">
           <a href="#sec-top" class="side-link">Topki</a>
           <a href="#sec-kings" class="side-link">Nr 1 wykonawca</a>
+          <a href="#sec-when" class="side-link">Kiedy słuchasz</a>
           <a href="#sec-trend" class="side-link">Top 10 w czasie</a>
           <a href="#artist-card" class="side-link">Wykonawca</a>
           <a href="./spotify.html" class="side-link">Automat</a>
@@ -132,6 +133,14 @@
             </div>
           </section>
 
+          <section id="sec-when" class="section card">
+            <div class="section-head"><h2 class="section-title">Kiedy słuchasz</h2><span id="when-summary" class="section-hint"></span></div>
+            <div class="when">
+              <div><h3 class="sub-title">Godziny</h3><div id="when-hours" class="bars bars--hours"></div></div>
+              <div><h3 class="sub-title">Dni tygodnia</h3><div id="when-days" class="bars bars--days"></div></div>
+            </div>
+          </section>
+
           <section id="sec-trend" class="section card">
             <div class="section-head">
               <h2 class="section-title">Top 10 w czasie</h2>
@@ -178,9 +187,9 @@
     </div>
 
     <script src="./jszip.min.js"></script>
-    <script src="./analytics.js?v=11"></script>
-    <script src="./charts.js?v=11"></script>
-    <script src="./live.js?v=11"></script>
-    <script src="./app.js?v=11"></script>
+    <script src="./analytics.js?v=12"></script>
+    <script src="./charts.js?v=12"></script>
+    <script src="./live.js?v=12"></script>
+    <script src="./app.js?v=12"></script>
   </body>
 </html>

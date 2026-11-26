@@ -335,7 +335,26 @@
     return { buckets, leaders, kings, series };
   }
 
+  /**
+   * Kiedy słuchasz: minuty w każdej godzinie doby (0–23) i w każdym dniu tygodnia (pon = 0), czas lokalny.
+   * Zwraca też najlepszą godzinę i najlepszy dzień (null, gdy brak odsłuchów).
+   */
+  function listeningHours(rows) {
+    const hours = new Array(24).fill(0);
+    const days = new Array(7).fill(0);
+    let total = 0;
+    for (const r of rows) {
+      const d = new Date(r.t);
+      hours[d.getHours()] += r.ms;
+      days[(d.getDay() + 6) % 7] += r.ms;
+      total += r.ms;
+    }
+    const argmax = (a) => (total ? a.indexOf(Math.max(...a)) : null);
+    return { hours, days, total, peakHour: argmax(hours), peakDay: argmax(days) };
+  }
+
   const API = {
+    listeningHours,
     rankTimeline,
     MIN_STREAM_MS,
     trackKey,

@@ -337,3 +337,14 @@ button { font: inherit; color: inherit; }
   font-size: 0.85rem; font-weight: 700; padding: 0.5rem 1.2rem; border-radius: 999px; cursor: pointer; transition: background 0.15s, border-color 0.15s;
 }
 .more-btn:hover { background: var(--elev); border-color: #fff; }
+
+/* Kiedy słuchasz */
+.when { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-top: 0.5rem; }
+.when .sub-title { margin-bottom: 0.6rem; }
+.bars { display: flex; align-items: flex-end; gap: 4px; height: 150px; padding-bottom: 1.3rem; position: relative; }
+.bar { flex: 1; min-width: 0; height: 100%; display: flex; align-items: flex-end; justify-content: center; position: relative; }
+.bar__fill { width: 100%; background: var(--elev-hover, #3a3a3a); border-radius: 4px 4px 0 0; transition: background 0.15s; }
+.bar:hover .bar__fill { background: #8a8a8a; }
+.bar.is-peak .bar__fill, .bar.is-peak:hover .bar__fill { background: var(--green); }
+.bar__label { position: absolute; bottom: -1.3rem; left: 50%; transform: translateX(-50%); font-size: 0.7rem; color: var(--text-3); white-space: nowrap; }
+@media (max-width: 900px) { .when { grid-template-columns: minmax(0, 1fr); gap: 1.8rem; } }
