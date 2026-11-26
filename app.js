@@ -27,6 +27,10 @@
   // ─────────────────────────────────────────────────────── STAN
   const state = {
     rows: [],
+    exportRows: [],
+    liveRows: [],
+    liveStatus: null,
+    liveAdded: 0,
     meta: null,
     range: '28d',
     year: null,
@@ -174,9 +178,21 @@
   }
 
   // ─────────────────────────────────────────────────────── RENDER
+  /** Eksport (z IndexedDB) + odsłuchy dociągnięte automatem, tylko te nowsze niż koniec eksportu. */
   function setData(rows, meta) {
-    state.rows = rows;
+    state.exportRows = rows;
     state.meta = meta;
+    recombine();
+  }
+
+  function recombine() {
+    const exp = state.exportRows;
+    const exportEnd = exp.length ? exp[exp.length - 1].t : -Infinity;
+    // Demo nie miesza się z prawdziwymi danymi.
+    const extra = state.meta && state.meta.demo ? [] : state.liveRows.filter((r) => r.t > exportEnd);
+    state.liveAdded = extra.length;
+    const rows = extra.length ? exp.concat(extra) : exp; // obie listy posortowane, a extra jest później
+    state.rows = rows;
     const years = A.yearsIn(rows);
     if (!years.includes(state.year)) state.year = years[0];
     document.getElementById('year-select').innerHTML = years.map((y) => `<option value="${y}">Rok ${y}</option>`).join('');
@@ -190,10 +206,12 @@
     document.getElementById('state-empty').classList.toggle('hidden', has);
     document.getElementById('state-data').classList.toggle('hidden', !has);
     document.getElementById('topbar-actions').classList.toggle('hidden', !has);
+    renderLiveBanner();
     if (!has) return;
 
     const m = state.meta || {};
     const parts = [`${nf.format(state.rows.length)} odsłuchów`];
+    if (state.liveAdded) parts.push(`w tym ${nf.format(state.liveAdded)} z automatu`);
     if (m.podcasts) parts.push(`${nf.format(m.podcasts)} podcastów pominiętych`);
     if (m.duplicates) parts.push(`${nf.format(m.duplicates)} duplikatów usuniętych`);
     document.getElementById('data-info').textContent = parts.join(' · ');
@@ -207,7 +225,7 @@
     const slice = A.sliceRange(state.rows, from, to);
     const lastTs = state.rows[state.rows.length - 1].t;
     let label = fmtSpan(from, to);
-    if (state.range !== 'year' && state.range !== 'all') label += ` · liczone wstecz od ostatniego odsłuchu w eksporcie (${fmtDate(lastTs)})`;
+    if (state.range !== 'year' && state.range !== 'all') label += ` · liczone wstecz od ostatniego odsłuchu w danych (${fmtDate(lastTs)})`;
     document.getElementById('range-label').textContent = label;
 
     renderKpis(slice, from, to);
@@ -410,9 +428,8 @@
     document.getElementById('btn-clear-data').addEventListener('click', async () => {
       if (!confirm('Usunąć wczytaną historię z tej przeglądarki?')) return;
       try { await clearData(); } catch { /* ignoruj */ }
-      state.rows = [];
       state.meta = null;
-      render();
+      setData([], null);
     });
 
     document.getElementById('btn-load-demo').addEventListener('click', () => {
@@ -504,14 +521,62 @@
     });
   }
 
+  // ─────────────────────────────────────────────────────── AUTOMAT (gałąź „dane”)
+  async function loadLive() {
+    const L = window.SpotiLive;
+    if (!L || location.protocol === 'file:') return;
+    try {
+      const status = await L.loadStatus();
+      state.liveStatus = status || { missing: true };
+      if (status && status.files && status.files.length) {
+        state.liveRows = A.normalizeRows(await L.loadRows(status)).rows;
+      }
+    } catch {
+      state.liveStatus = { offline: true };
+    }
+    recombine();
+  }
+
+  function renderLiveBanner() {
+    const el = document.getElementById('live-banner');
+    const s = state.liveStatus;
+    const L = window.SpotiLive;
+    let html = '';
+    let warn = false;
+    if (!s || s.offline) {
+      html = '';
+    } else if (s.missing || !s.connectedAt) {
+      html = 'Nowe odsłuchy mogą się dociągać same — <a href="./spotify.html">włącz automat</a>.';
+    } else if (s.error === 'invalid_grant') {
+      warn = true;
+      html = '⚠️ Logowanie automatu do Spotify wygasło, więc nowe odsłuchy się nie dociągają. <a href="./spotify.html">Zaloguj się ponownie</a>.';
+    } else if (L.tokenAgeDays(s) > L.TOKEN_LIFETIME_DAYS - 14) {
+      warn = true;
+      html = `⚠️ Logowanie automatu do Spotify wygaśnie za ok. ${Math.max(0, Math.round(L.TOKEN_LIFETIME_DAYS - L.tokenAgeDays(s)))} dni. <a href="./spotify.html">Odnów je</a>.`;
+    } else if (s.error) {
+      warn = true;
+      html = `⚠️ Ostatnia synchronizacja się nie udała. <a href="./spotify.html">Szczegóły</a>.`;
+    } else if (s.lastSync) {
+      const ago = Math.floor((Date.now() - Date.parse(s.lastSync)) / 3_600_000);
+      warn = ago > 6;
+      html = `${warn ? '⚠️' : '🟢'} Automat: ostatnia synchronizacja ${ago < 1 ? 'mniej niż godzinę' : `${ago} godz.`} temu` +
+        (state.liveAdded ? `, dołożył ${nf.format(state.liveAdded)} odsłuchów po końcu eksportu.` : '.') +
+        (warn ? ' Coś się zacięło — <a href="./spotify.html">sprawdź</a>.' : '');
+    }
+    el.innerHTML = html;
+    el.classList.toggle('hidden', !html);
+    el.classList.toggle('live-banner--warn', warn);
+  }
+
   async function init() {
     loadPrefs();
     wire();
     try {
       const stored = await loadData();
-      if (stored && stored.rows && stored.rows.length) { setData(stored.rows, stored.meta); return; }
-    } catch { /* IndexedDB niedostępne — zaczynamy od zera */ }
-    render();
+      if (stored && stored.rows && stored.rows.length) setData(stored.rows, stored.meta);
+      else render();
+    } catch { render(); /* IndexedDB niedostępne — zaczynamy od zera */ }
+    loadLive();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

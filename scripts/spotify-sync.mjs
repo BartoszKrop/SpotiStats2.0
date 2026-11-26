@@ -1,0 +1,199 @@
+#!/usr/bin/env node
+/*
+ * Automatyczne dociąganie odsłuchów ze Spotify (uruchamiane przez GitHub Actions).
+ *
+ *   node scripts/spotify-sync.mjs connect <katalog-danych>   — jednorazowo: wymienia kod z logowania na token
+ *   node scripts/spotify-sync.mjs sync <katalog-danych>      — co godzinę: dopisuje nowe odsłuchy
+ *
+ * Zmienne środowiskowe: SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_CODE (connect),
+ * GITHUB_REPOSITORY (do ustalenia adresu powrotu na GitHub Pages).
+ *
+ * Układ katalogu danych (gałąź „dane”):
+ *   status.json           — kiedy ostatnia synchronizacja, kiedy połączono, ewentualny błąd
+ *   token.json            — refresh token zaszyfrowany AES-256-GCM kluczem z SPOTIFY_CLIENT_SECRET
+ *   odsluchy/<rok>.json   — odsłuchy w formacie rozszerzonego eksportu Spotify
+ */
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const TOKEN_URL = 'https://accounts.spotify.com/api/token';
+const RECENT_URL = 'https://api.spotify.com/v1/me/player/recently-played?limit=50';
+
+// ─────────────────────────────────────────────── szyfrowanie tokenu
+
+function keyFrom(secret) {
+  return createHash('sha256').update(`spotistats-token:${secret}`).digest();
+}
+
+export function encryptToken(token, secret) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', keyFrom(secret), iv);
+  const data = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
+  return { v: 1, iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), data: data.toString('base64') };
+}
+
+export function decryptToken(box, secret) {
+  const decipher = createDecipheriv('aes-256-gcm', keyFrom(secret), Buffer.from(box.iv, 'base64'));
+  decipher.setAuthTag(Buffer.from(box.tag, 'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(box.data, 'base64')), decipher.final()]).toString('utf8');
+}
+
+// ─────────────────────────────────────────────── konwersja i scalanie
+
+/** Element z /me/player/recently-played → wiersz w formacie rozszerzonego eksportu. */
+export function itemToRow(item) {
+  const t = item.track || {};
+  return {
+    ts: new Date(item.played_at).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    // API nie podaje, ile faktycznie słuchano — zwraca tylko utwory grane ≥30 s,
+    // więc przyjmujemy długość utworu.
+    ms_played: t.duration_ms || 0,
+    master_metadata_track_name: t.name || null,
+    master_metadata_album_artist_name: t.artists?.[0]?.name || null,
+    master_metadata_album_album_name: t.album?.name || null,
+    spotify_track_uri: t.uri || null,
+    source: 'api'
+  };
+}
+
+/** Dokleja nowe wiersze do istniejących (po roku), bez duplikatów. Zwraca liczbę dodanych. */
+export function mergeRows(byYear, newRows) {
+  let added = 0;
+  for (const row of newRows) {
+    if (!row.master_metadata_track_name || !row.ts) continue;
+    const year = row.ts.slice(0, 4);
+    const list = (byYear[year] ||= []);
+    if (list.some((r) => r.ts === row.ts && r.spotify_track_uri === row.spotify_track_uri)) continue;
+    list.push(row);
+    added++;
+  }
+  for (const list of Object.values(byYear)) list.sort((a, b) => a.ts.localeCompare(b.ts));
+  return added;
+}
+
+export function redirectUri(repository) {
+  const [owner, repo] = String(repository || '').split('/');
+  if (!owner || !repo) throw new Error('Brak GITHUB_REPOSITORY (owner/repo).');
+  return `https://${owner.toLowerCase()}.github.io/${repo}/spotify.html`;
+}
+
+// ─────────────────────────────────────────────── Spotify
+
+async function tokenRequest(params, env) {
+  const res = await fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: 'Basic ' + Buffer.from(`${env.SPOTIFY_CLIENT_ID}:${env.SPOTIFY_CLIENT_SECRET}`).toString('base64')
+    },
+    body: new URLSearchParams(params)
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(`Spotify odrzucił token (${res.status}): ${body.error || ''} ${body.error_description || ''}`.trim());
+    err.code = body.error;
+    throw err;
+  }
+  return body;
+}
+
+async function readJson(path, fallback) {
+  try { return JSON.parse(await readFile(path, 'utf8')); } catch { return fallback; }
+}
+const writeJson = (path, data) => writeFile(path, JSON.stringify(data, null, 1) + '\n');
+
+function requireEnv(env, names) {
+  const missing = names.filter((n) => !env[n]);
+  if (missing.length) throw new Error(`Brak sekretów/zmiennych: ${missing.join(', ')}. Dodaj je w Settings → Secrets and variables → Actions.`);
+}
+
+export async function connect(dir, env = process.env) {
+  requireEnv(env, ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET', 'SPOTIFY_CODE']);
+  const tokens = await tokenRequest({
+    grant_type: 'authorization_code',
+    code: env.SPOTIFY_CODE.trim(),
+    redirect_uri: redirectUri(env.GITHUB_REPOSITORY)
+  }, env);
+  if (!tokens.refresh_token) throw new Error('Spotify nie zwrócił refresh tokenu.');
+  await mkdir(dir, { recursive: true });
+  await writeJson(join(dir, 'token.json'), encryptToken(tokens.refresh_token, env.SPOTIFY_CLIENT_SECRET));
+  const status = await readJson(join(dir, 'status.json'), {});
+  Object.assign(status, { connectedAt: new Date().toISOString(), error: null, errorAt: null });
+  await writeJson(join(dir, 'status.json'), status);
+  console.log('Połączono ze Spotify. Token zapisany (zaszyfrowany).');
+  // Od razu pierwsza synchronizacja.
+  await sync(dir, env, tokens.access_token);
+}
+
+export async function sync(dir, env = process.env, accessToken = null) {
+  const statusPath = join(dir, 'status.json');
+  const status = await readJson(statusPath, {});
+  const box = await readJson(join(dir, 'token.json'), null);
+  if (!accessToken && !box) {
+    // Zanim ktoś skonfiguruje automat, cogodzinne uruchomienia kończą się po cichu (bez czerwonych maili).
+    console.log('Jeszcze nie połączono ze Spotify — instrukcja na stronie spotify.html. Pomijam.');
+    return { added: 0, skipped: true };
+  }
+  requireEnv(env, ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET']);
+
+  try {
+    if (!accessToken) {
+      const refresh = decryptToken(box, env.SPOTIFY_CLIENT_SECRET);
+      const tokens = await tokenRequest({ grant_type: 'refresh_token', refresh_token: refresh }, env);
+      accessToken = tokens.access_token;
+      // Spotify czasem wydaje nowy refresh token — wtedy go podmieniamy.
+      if (tokens.refresh_token && tokens.refresh_token !== refresh) {
+        await writeJson(join(dir, 'token.json'), encryptToken(tokens.refresh_token, env.SPOTIFY_CLIENT_SECRET));
+      }
+    }
+
+    const res = await fetch(RECENT_URL, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) throw new Error(`Spotify API: ${res.status} ${await res.text().catch(() => '')}`.slice(0, 300));
+    const { items = [] } = await res.json();
+
+    const folder = join(dir, 'odsluchy');
+    await mkdir(folder, { recursive: true });
+    const years = [...new Set(items.map((i) => new Date(i.played_at).toISOString().slice(0, 4)))];
+    const byYear = {};
+    for (const y of years) byYear[y] = await readJson(join(folder, `${y}.json`), []);
+    const added = mergeRows(byYear, items.map(itemToRow));
+    for (const y of years) await writeJson(join(folder, `${y}.json`), byYear[y]);
+
+    const files = new Set(status.files || []);
+    for (const y of years) files.add(`odsluchy/${y}.json`);
+    const newest = items.map((i) => i.played_at).sort().pop();
+    Object.assign(status, {
+      lastSync: new Date().toISOString(),
+      lastPlayedAt: [status.lastPlayedAt, newest].filter(Boolean).sort().pop() || null,
+      files: [...files].sort(),
+      error: null,
+      errorAt: null
+    });
+    await writeJson(statusPath, status);
+    console.log(`Pobrano ${items.length} ostatnich utworów, nowych: ${added}.`);
+    return { added };
+  } catch (err) {
+    // Błąd zapisujemy, żeby strona mogła go pokazać (np. wygasłe logowanie po 6 miesiącach).
+    Object.assign(status, {
+      error: err.code === 'invalid_grant' ? 'invalid_grant' : String(err.message).slice(0, 300),
+      errorAt: new Date().toISOString()
+    });
+    await writeJson(statusPath, status);
+    throw err;
+  }
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+  const [mode, dir = 'dane'] = process.argv.slice(2);
+  const run = mode === 'connect' ? connect : mode === 'sync' ? sync : null;
+  if (!run) {
+    console.error('Użycie: node scripts/spotify-sync.mjs connect|sync <katalog>');
+    process.exit(2);
+  }
+  run(dir).catch((err) => {
+    console.error(`::error::${err.message}`);
+    process.exit(1);
+  });
+}
