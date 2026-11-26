@@ -47,7 +47,8 @@
     kingsUnit: null, // null = automatycznie (tygodnie do roku, dłużej miesiące)
     slot: 1,
     accounts: null, // z konta.json (null = jeszcze nie wczytane / brak sieci)
-    liveCache: new Map() // slot -> znormalizowane wiersze z automatu
+    liveCache: new Map(), // slot -> znormalizowane wiersze z automatu
+    images: new Map() // nazwa wykonawcy małymi literami -> url zdjęcia (z automatu)
   };
 
   function loadPrefs() {
@@ -201,6 +202,12 @@
   function avatar(name, cls = '') {
     return `<span class="avatar ${cls}" style="--h:${hueOf(name)}" aria-hidden="true">${esc(initials(name))}</span>`;
   }
+  /** Zdjęcie wykonawcy, jeśli automat je zdobył — inaczej kolorowe inicjały. */
+  function artistAvatar(name, cls = '') {
+    const img = state.images.get(String(name).toLowerCase());
+    if (!img) return avatar(name, cls);
+    return `<span class="avatar avatar--img ${cls}" style="--h:${hueOf(name)}" aria-hidden="true"><img src="${esc(img)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()" />${esc(initials(name))}</span>`;
+  }
 
   function accountOf(slot) {
     return (state.accounts || []).find((a) => a.slot === slot) || { slot, name: null };
@@ -336,7 +343,7 @@
   function artistGrid(items) {
     if (!items.length) return '<p class="no-data">Brak odsłuchów w tym zakresie.</p>';
     return items.map((it, i) => `<button type="button" class="artist-card" data-artist="${esc(it.name)}" title="Pokaż wykres: ${esc(it.name)}">
-        ${avatar(it.name, 'avatar--lg')}
+        ${artistAvatar(it.name, 'avatar--lg')}
         <span class="artist-card__name"><span class="artist-card__rank">${i + 1}.</span> ${esc(it.name)}</span>
         <span class="artist-card__sub">${valueOf(it)}</span>
       </button>`).join('');
@@ -350,13 +357,14 @@
   }
 
   // ─────────────────────────────────────────────────────── NR 1 TYGODNIA
+  const KINGS_DEPTH = 5;
   function renderKings(slice, from, to) {
     const span = (to - from) / 86_400_000;
     const allowed = { week: span >= 14, month: span >= 60 };
-    const auto = span > 400 && allowed.month ? 'month' : 'week';
+    const auto = allowed.month ? 'month' : 'week';
     const unit = state.kingsUnit && allowed[state.kingsUnit] ? state.kingsUnit : auto;
     syncSeg('kings-unit', 'unit', unit, allowed);
-    const r = A.rankTimeline(slice, from, to, unit, { depth: 10, limit: 6, sortBy: state.sortBy });
+    const r = A.rankTimeline(slice, from, to, unit, { depth: KINGS_DEPTH, limit: span > 730 ? 4 : 5, sortBy: state.sortBy, outside: true });
     const unitWord = unit === 'month' ? ['miesiąc', 'miesiące', 'miesięcy', 'w tym miesiącu'] : ['tydzień', 'tygodnie', 'tygodni', 'w tym tygodniu'];
     const plural = (n) => (n === 1 ? unitWord[0] : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? unitWord[1] : unitWord[2]);
 
@@ -366,7 +374,7 @@
     let streak = 0;
     if (now) for (let i = lastIdx; i >= 0 && r.leaders[i] && r.leaders[i].name === now.name; i--) streak++;
     document.getElementById('kings-now').innerHTML = now
-      ? `<button type="button" class="kings-now__card" data-artist="${esc(now.name)}">${avatar(now.name, 'avatar--lg')}
+      ? `<button type="button" class="kings-now__card" data-artist="${esc(now.name)}">${artistAvatar(now.name, 'avatar--lg')}
           <span><span class="kicker">Nr 1 ${lastIdx === r.leaders.length - 1 ? unitWord[3] : 'ostatnio'}</span>
           <span class="kings-now__name">${esc(now.name)}</span>
           <span class="kings-now__sub">${streak > 1 ? `${streak} ${plural(streak)} z rzędu · ` : ''}${nf.format(minutes(now.ms))} min</span></span></button>`
@@ -375,7 +383,7 @@
     const maxW = Math.max(1, ...r.kings.map((k) => k.weeks));
     document.getElementById('kings-list').innerHTML = r.kings.slice(0, 8).map((k) =>
       `<li class="kings-row" data-artist="${esc(k.name)}" tabindex="0" role="button">
-        ${avatar(k.name, 'avatar--sm')}<span class="kings-row__name">${esc(k.name)}</span>
+        ${artistAvatar(k.name, 'avatar--sm')}<span class="kings-row__name">${esc(k.name)}</span>
         <span class="kings-row__bar"><span style="width:${(k.weeks / maxW) * 100}%"></span></span>
         <span class="kings-row__val">${k.weeks} ${plural(k.weeks)}</span></li>`).join('') || '<li class="no-data">—</li>';
 
@@ -391,8 +399,9 @@
       buckets: r.buckets,
       unit,
       rank: true,
-      maxRank: 10,
-      height: 320,
+      rankOut: true,
+      maxRank: KINGS_DEPTH + 1,
+      height: 260,
       series: r.series.map((s) => ({ name: s.key, color: colors.get(s.key), values: s.values })),
       tipExtra: (i) => (r.leaders[i] ? `<div class="chart-tip__lead">👑 ${esc(r.leaders[i].name)} · ${nf.format(minutes(r.leaders[i].ms))} min</div>` : '')
     });
@@ -474,7 +483,7 @@
 
     body.innerHTML = `
       <div class="artist-head">
-        <div class="artist-id">${avatar(details.artist, 'avatar--lg')}<h3 class="artist-name">${esc(details.artist)}</h3></div>
+        <div class="artist-id">${artistAvatar(details.artist, 'avatar--lg')}<h3 class="artist-name">${esc(details.artist)}</h3></div>
         <dl class="artist-facts">
           <div><dt>Łącznie</dt><dd>${nf.format(minutes(details.ms))} min · ${nf.format(details.plays)}×</dd></div>
           <div><dt>W wybranym zakresie</dt><dd>${nf.format(minutes(rangeStats.ms))} min · ${nf.format(rangeStats.plays)}×</dd></div>
@@ -740,6 +749,10 @@
     }
     render();
     loadLiveFor(state.slot);
+    try {
+      state.images = await L.loadArtistImages();
+      if (state.images.size) render();
+    } catch { /* bez zdjęć — zostają inicjały */ }
   }
 
   function renderLiveBanner() {

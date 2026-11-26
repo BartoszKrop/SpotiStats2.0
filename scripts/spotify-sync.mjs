@@ -15,6 +15,7 @@
  *   konta/<n>/status.json          — kiedy ostatnia synchronizacja, kiedy połączono, ewentualny błąd
  *   konta/<n>/token.json           — refresh token zaszyfrowany AES-256-GCM kluczem z SPOTIFY_CLIENT_SECRET
  *   konta/<n>/odsluchy/<rok>.json  — odsłuchy w formacie rozszerzonego eksportu Spotify
+ *   wykonawcy.json                 — zdjęcia wykonawców (nazwa małymi literami → { name, img, at })
  */
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -24,6 +25,11 @@ import { pathToFileURL } from 'node:url';
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const RECENT_URL = 'https://api.spotify.com/v1/me/player/recently-played?limit=50';
 const ME_URL = 'https://api.spotify.com/v1/me';
+const SEARCH_URL = 'https://api.spotify.com/v1/search';
+/** Ile nowych wykonawców szukać w jednym przebiegu (reszta w kolejnych godzinach). */
+const IMAGES_PER_RUN = 40;
+/** Wykonawcę bez zdjęcia sprawdzamy ponownie po tylu dniach. */
+const IMAGE_RETRY_DAYS = 30;
 export const SLOTS = 5; // tryb developerski Spotify: właściciel + 4 osoby
 
 // ─────────────────────────────────────────────── szyfrowanie tokenu
@@ -185,7 +191,7 @@ export async function sync(dir, env = process.env, accessToken = null) {
     });
     await writeJson(statusPath, status);
     console.log(`Pobrano ${items.length} ostatnich utworów, nowych: ${added}.`);
-    return { added };
+    return { added, accessToken };
   } catch (err) {
     // Błąd zapisujemy, żeby strona mogła go pokazać (np. wygasłe logowanie po 6 miesiącach).
     Object.assign(status, {
@@ -195,6 +201,59 @@ export async function sync(dir, env = process.env, accessToken = null) {
     await writeJson(statusPath, status);
     throw err;
   }
+}
+
+// ─────────────────────────────────────────────── zdjęcia wykonawców
+
+/** Najmniejsze zdjęcie, które ma co najmniej `min` px (Spotify zwraca je od największego). */
+export function pickImage(images, min = 160) {
+  const list = (images || []).filter((i) => i && i.url);
+  if (!list.length) return null;
+  const ok = list.filter((i) => !i.width || i.width >= min);
+  return (ok.length ? ok[ok.length - 1] : list[0]).url;
+}
+
+/**
+ * Dopisuje do wykonawcy.json zdjęcia wykonawców o podanych nazwach (wyszukiwanie po nazwie,
+ * tylko dokładne dopasowanie). Brak zdjęcia też zapamiętujemy, żeby nie pytać co godzinę.
+ */
+export async function updateArtistImages(root, accessToken, names, { max = IMAGES_PER_RUN, now = Date.now() } = {}) {
+  const path = join(root, 'wykonawcy.json');
+  const known = await readJson(path, {});
+  const retryBefore = now - IMAGE_RETRY_DAYS * 86_400_000;
+  const todo = [...new Set(names.filter(Boolean))]
+    .filter((n) => { const e = known[n.toLowerCase()]; return !e || (!e.img && Date.parse(e.at || 0) < retryBefore); })
+    .slice(0, max);
+  let found = 0;
+  for (const name of todo) {
+    const url = `${SEARCH_URL}?type=artist&limit=5&q=${encodeURIComponent(name)}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (res.status === 429) break; // limit zapytań — dokończymy w następnej godzinie
+    if (!res.ok) throw new Error(`Spotify search: ${res.status}`);
+    const items = (await res.json())?.artists?.items || [];
+    const hit = items.find((a) => a && String(a.name).toLowerCase() === name.toLowerCase());
+    const img = hit ? pickImage(hit.images) : null;
+    if (img) found++;
+    known[name.toLowerCase()] = { name, img, at: new Date(now).toISOString() };
+  }
+  if (todo.length) {
+    await writeJson(path, known);
+    console.log(`Zdjęcia wykonawców: sprawdzono ${todo.length}, znaleziono ${found}.`);
+  }
+  return { checked: todo.length, found };
+}
+
+/** Nazwy wykonawców z odsłuchów konta, od najczęściej słuchanych. */
+async function artistNames(dir) {
+  const status = await readJson(join(dir, 'status.json'), {});
+  const count = new Map();
+  for (const f of status.files || []) {
+    for (const r of await readJson(join(dir, f), [])) {
+      const n = r.master_metadata_album_artist_name;
+      if (n) count.set(n, (count.get(n) || 0) + (r.ms_played || 0));
+    }
+  }
+  return [...count.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n);
 }
 
 // ─────────────────────────────────────────────── wiele kont
@@ -249,7 +308,12 @@ export async function syncAll(root, env = process.env) {
     if (!(await exists(join(dir, 'token.json')))) continue;
     connected++;
     try {
-      await sync(dir, env);
+      const { accessToken } = await sync(dir, env);
+      try {
+        await updateArtistImages(root, accessToken, await artistNames(dir));
+      } catch (err) {
+        console.error(`Zdjęcia wykonawców (konto ${slot}): ${err.message}`); // nie psuje synchronizacji
+      }
     } catch (err) {
       console.error(`Konto ${slot}: ${err.message}`);
       // Wygasłe logowanie jednej osoby to nie awaria całego automatu — strona pokaże baner.

@@ -156,4 +156,7 @@ test('rankTimeline: kto był nr 1 w każdym tygodniu', () => {
   assert.deepEqual(byKey.B, [2, 1, 1]);
   assert.deepEqual(byKey.A, [1, 2, null]);
   assert.deepEqual(byKey.C, [null, null, null]); // C był 3. — poza depth=2
+  const out = A.rankTimeline(rows, new Date(2026, 0, 5).getTime(), new Date(2026, 1, 2).getTime(), 'week', { depth: 2, limit: 3, outside: true });
+  const o = Object.fromEntries(out.series.map((s) => [s.key, s.values]));
+  assert.deepEqual(o.A, [1, 2, 3, null]); // 3 = „poza top 2”, null = tydzień bez odsłuchów
 });

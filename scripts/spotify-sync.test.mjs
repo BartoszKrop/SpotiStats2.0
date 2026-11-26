@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { encryptToken, decryptToken, itemToRow, mergeRows, redirectUri, connect, sync, migrateLegacy, syncAll, connectSlot, disconnectSlot } from './spotify-sync.mjs';
+import { encryptToken, decryptToken, itemToRow, mergeRows, redirectUri, connect, sync, migrateLegacy, syncAll, connectSlot, disconnectSlot, pickImage, updateArtistImages } from './spotify-sync.mjs';
 import { stat } from 'node:fs/promises';
 
 const item = (playedAt, name, artist = 'Artist') => ({
@@ -171,4 +171,25 @@ test('connectSlot zapisuje nazwę i konto; disconnectSlot usuwa', async () => {
   assert.equal(idx.slots[1].name, null);
   assert.equal(await exists(join(root, 'konta/2')), false);
   await assert.rejects(() => connectSlot(root, { ...env, SPOTIFY_CODE: 'k', SPOTIFY_SLOT: '6' }), /od 1 do 5/);
+});
+
+test('pickImage wybiera najmniejsze zdjęcie ≥160 px', () => {
+  assert.equal(pickImage([{ url: 'big', width: 640 }, { url: 'mid', width: 320 }, { url: 'small', width: 64 }]), 'mid');
+  assert.equal(pickImage([{ url: 'tiny', width: 64 }]), 'tiny');
+  assert.equal(pickImage([]), null);
+});
+
+test('updateArtistImages: dokładne dopasowanie, pamięta braki, nie pyta drugi raz', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ss-'));
+  const calls = mockFetch((url) => ({ body: { artists: { items: url.includes('sanah')
+    ? [{ name: 'Sanah', images: [{ url: 'https://i/sanah', width: 320 }] }]
+    : [{ name: 'Ktoś inny', images: [{ url: 'x', width: 320 }] }] } } }));
+  const r = await updateArtistImages(root, 'acc', ['sanah', 'Nieznany', 'sanah']);
+  assert.deepEqual(r, { checked: 2, found: 1 });
+  assert.equal(calls[0].opts.headers.Authorization, 'Bearer acc');
+  const known = JSON.parse(await readFile(join(root, 'wykonawcy.json'), 'utf8'));
+  assert.equal(known.sanah.img, 'https://i/sanah');
+  assert.equal(known['nieznany'].img, null);
+  const again = await updateArtistImages(root, 'acc', ['sanah', 'Nieznany']);
+  assert.equal(again.checked, 0);
 });
