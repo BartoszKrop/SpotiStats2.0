@@ -1,0 +1,32 @@
+{
+ "slots": [
+  {
+   "slot": 1,
+   "name": "Konto 1",
+   "connectedAt": "2026-11-26T18:30:14.414Z",
+   "lastSync": "2026-11-26T18:48:32.601Z",
+   "lastPlayedAt": "2026-11-26T18:35:21.132Z",
+   "error": null,
+   "files": [
+    "odsluchy/2026.json"
+   ]
+  },
+  {
+   "slot": 2,
+   "name": null
+  },
+  {
+   "slot": 3,
+   "name": null
+  },
+  {
+   "slot": 4,
+   "name": null
+  },
+  {
+   "slot": 5,
+   "name": null
+  }
+ ],
+ "updatedAt": "2026-11-26T18:48:32.602Z"
+}

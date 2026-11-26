@@ -448,5 +448,14 @@
   "master_metadata_album_album_name": "Red (Taylor's Version)",
   "spotify_track_uri": "spotify:track:4pNApnaUWAL2J4KO2eqokq",
   "source": "api"
+ },
+ {
+  "ts": "2026-11-26T18:35:21Z",
+  "ms_played": 299080,
+  "master_metadata_track_name": "The Last Time (feat. Gary Lightbody of Snow Patrol) (Taylor’s Version)",
+  "master_metadata_album_artist_name": "Taylor Swift",
+  "master_metadata_album_album_name": "Red (Taylor's Version)",
+  "spotify_track_uri": "spotify:track:0y6kdSRCVQhSsHSpWvTUm7",
+  "source": "api"
  }
 ]
