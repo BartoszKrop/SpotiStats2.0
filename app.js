@@ -46,6 +46,8 @@
     artistUnit: null,
     recordsKind: 'artist',
     saveWarning: '',
+    cloudMsg: null, // { text, warn } — komunikat o zapisie na GitHubie
+    cloudBusy: false,
     showMore: false, // topki: 10 pozycji albo 25
     kingsUnit: null, // null = automatycznie (tygodnie do roku, dłużej miesiące)
     slot: 1,
@@ -152,6 +154,7 @@
         state.saveWarning = 'Ta przeglądarka nie zapamiętała wgranego eksportu, więc po zamknięciu strony trzeba będzie go wgrać ponownie. Otwórz stronę w Safari/Chrome (nie z okienka innej aplikacji) i wgraj plik jeszcze raz.';
       }
       render();
+      if (getToken() && !state.saveWarning) cloudSend();
     } catch (err) {
       status.classList.add('import-status--error');
       status.textContent = `Błąd: ${err.message}`;
@@ -247,11 +250,11 @@
   function accountName(slot) {
     const a = accountOf(slot);
     if (a.name) return a.name;
-    if (a.connectedAt) return slot === 1 ? 'Ty' : `Konto ${slot}`;
+    if (a.connectedAt || a.export) return slot === 1 ? 'Ty' : `Konto ${slot}`;
     return slot === 1 ? 'Ty' : null;
   }
   function slotHasData(slot) {
-    return Boolean(accountOf(slot).connectedAt) || slot === state.slot && state.exportRows.length > 0;
+    return Boolean(accountOf(slot).connectedAt || accountOf(slot).export) || slot === state.slot && state.exportRows.length > 0;
   }
 
   function renderAccounts() {
@@ -261,7 +264,7 @@
       const name = accountName(slot);
       const a = accountOf(slot);
       const active = slot === state.slot;
-      const sub = a.connectedAt ? (a.error ? 'automat: błąd' : 'automat działa') : name ? 'tylko eksport' : 'wolne miejsce';
+      const sub = a.connectedAt ? (a.error ? 'automat: błąd' : 'automat działa') : a.export ? 'eksport na GitHubie' : name ? 'tylko eksport' : 'wolne miejsce';
       items.push(`<li><button type="button" class="account${active ? ' is-active' : ''}${name ? '' : ' is-empty'}" data-slot="${slot}" aria-current="${active}">
         ${name ? avatar(name, 'avatar--sm') : '<span class="avatar avatar--sm avatar--empty" aria-hidden="true">+</span>'}
         <span class="account-text"><span class="account-name">${esc(name || `Wolne miejsce ${slot}`)}</span><span class="account-sub">${sub}</span></span>
@@ -303,6 +306,7 @@
     document.body.classList.toggle('has-data', has);
     renderAccounts();
     renderLiveBanner();
+    renderCloud();
     if (!has) { renderEmpty(); renderHero(null); return; }
 
     const m = state.meta || {};
@@ -310,7 +314,11 @@
     if (state.liveAdded) parts.push(`w tym ${nf.format(state.liveAdded)} z automatu`);
     if (m.podcasts) parts.push(`${nf.format(m.podcasts)} podcastów pominiętych`);
     if (m.duplicates) parts.push(`${nf.format(m.duplicates)} duplikatów usuniętych`);
-    if (m.importedAt && !m.demo) parts.push(`eksport zapisany w tej przeglądarce (wgrany ${fmtDate(m.importedAt)})`);
+    if (m.importedAt && !m.demo) {
+      const onGh = state.accounts && accountOf(state.slot).export && accountOf(state.slot).export.importedAt === m.importedAt;
+      parts.push(m.fromCloud ? `eksport z GitHuba (wgrany ${fmtDate(m.importedAt)})`
+        : `eksport zapisany w tej przeglądarce (wgrany ${fmtDate(m.importedAt)})${onGh ? ' i na GitHubie' : ', jeszcze nie na GitHubie'}`);
+    }
     document.getElementById('data-info').textContent = parts.join(' · ');
     document.getElementById('data-info').title = m.usedFiles ? `Wczytane pliki:\n${m.usedFiles.join('\n')}` : '';
 
@@ -868,6 +876,7 @@
     document.getElementById('import-status').textContent = '';
     recombine();
     loadLiveFor(slot);
+    maybeLoadCloudExport(slot);
   }
 
   async function loadLiveFor(slot) {
@@ -893,6 +902,7 @@
     }
     render();
     loadLiveFor(state.slot);
+    maybeLoadCloudExport(state.slot);
     try {
       state.images = await L.loadArtistImages();
       state.covers = await L.loadAlbumCovers().catch(() => new Map());
@@ -903,6 +913,12 @@
 
   function renderLiveBanner() {
     const el = document.getElementById('live-banner');
+    if (state.cloudMsg) {
+      el.textContent = `${state.cloudMsg.warn ? '⚠️' : '☁'} ${state.cloudMsg.text}`;
+      el.classList.remove('hidden');
+      el.classList.toggle('live-banner--warn', Boolean(state.cloudMsg.warn));
+      return;
+    }
     if (state.saveWarning) {
       el.textContent = `⚠️ ${state.saveWarning}`;
       el.classList.remove('hidden');
@@ -938,6 +954,130 @@
     el.classList.toggle('live-banner--warn', warn);
   }
 
+  // ─────────────────────────────────────────────────────── ZAPIS NA GITHUBIE
+  const TOKEN_KEY = 'ss_gh_token';
+  const getToken = () => { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } };
+  const setToken = (t) => { try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch { /* ignoruj */ } };
+  const cloudRepo = () => (window.SpotiLive ? window.SpotiLive.repo() : 'BartoszKrop/SpotiStats2.0');
+  const hasExport = () => state.exportRows.length > 0 && !(state.meta && state.meta.demo);
+
+  function setCloudMsg(text, warn = false) {
+    state.cloudMsg = text ? { text, warn } : null;
+    const st = document.getElementById('cloud-status');
+    if (st) { st.textContent = text || ''; st.classList.toggle('cloud-status--error', Boolean(text && warn)); }
+    renderLiveBanner();
+  }
+
+  function renderCloud() {
+    const btn = document.getElementById('btn-cloud');
+    if (!btn) return;
+    btn.classList.toggle('hidden', !hasExport());
+    const acc = accountOf(state.slot);
+    const token = getToken();
+    document.getElementById('cloud-token-box').classList.toggle('hidden', Boolean(token));
+    document.getElementById('cloud-forget').classList.toggle('hidden', !token);
+    document.getElementById('cloud-remove').classList.toggle('hidden', !acc.export);
+    document.getElementById('cloud-name-box').classList.toggle('hidden', state.slot === 1);
+    const nameEl = document.getElementById('cloud-name');
+    if (nameEl && document.activeElement !== nameEl && !nameEl.value) nameEl.value = acc.name || '';
+    document.getElementById('cloud-send').disabled = state.cloudBusy || !hasExport();
+  }
+
+  function openCloud() {
+    const panel = document.getElementById('cloud-panel');
+    panel.classList.remove('hidden');
+    renderCloud();
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!getToken()) document.getElementById('cloud-token').focus({ preventScroll: true });
+  }
+
+  async function reloadAccounts() {
+    const L = window.SpotiLive;
+    if (!L || location.protocol === 'file:') return;
+    try { state.accounts = await L.loadAccounts(); } catch { /* zostają stare dane */ }
+    render();
+  }
+
+  async function cloudSend() {
+    if (state.cloudBusy || !hasExport()) return;
+    const typed = document.getElementById('cloud-token').value.trim();
+    const token = typed || getToken();
+    if (!token) { setCloudMsg('Wklej najpierw token z GitHuba (instrukcja powyżej).', true); return; }
+    if (!window.SpotiCloud) { setCloudMsg('Brak modułu zapisu (cloud.js).', true); return; }
+    const slot = state.slot;
+    const name = slot === 1 ? (accountOf(1).name || null) : (document.getElementById('cloud-name').value.trim() || accountOf(slot).name || null);
+    const importedAt = (state.meta && state.meta.importedAt) || Date.now();
+    state.cloudBusy = true;
+    renderCloud();
+    try {
+      const manifest = await window.SpotiCloud.upload({
+        token, repo: cloudRepo(), slot, rows: state.exportRows, meta: { importedAt, name },
+        onProgress: (t) => setCloudMsg(t)
+      });
+      setToken(token);
+      document.getElementById('cloud-token').value = '';
+      state.meta = { ...state.meta, importedAt: manifest.importedAt };
+      try { await saveData(slot, { rows: state.exportRows, meta: state.meta }); } catch { /* ignoruj */ }
+      setCloudMsg('Zapisano na GitHubie. Na innych urządzeniach pojawi się po odświeżeniu strony (do kilku minut).');
+      await reloadAccounts();
+    } catch (err) {
+      setCloudMsg(err.message || 'Nie udało się zapisać na GitHubie.', true);
+    } finally {
+      state.cloudBusy = false;
+      renderCloud();
+    }
+  }
+
+  async function cloudRemove() {
+    const token = getToken() || document.getElementById('cloud-token').value.trim();
+    if (!token) { setCloudMsg('Wklej token z GitHuba, żeby usunąć eksport.', true); return; }
+    if (!confirm('Usunąć eksport tego konta z GitHuba? (Wgrane w przeglądarce zostaje.)')) return;
+    state.cloudBusy = true;
+    try {
+      await window.SpotiCloud.remove({ token, repo: cloudRepo(), slot: state.slot });
+      setCloudMsg('Usunięto z GitHuba.');
+      await reloadAccounts();
+    } catch (err) {
+      setCloudMsg(err.message || 'Nie udało się usunąć.', true);
+    } finally {
+      state.cloudBusy = false;
+      renderCloud();
+    }
+  }
+
+  /** Jeśli na GitHubie jest nowszy eksport niż w tej przeglądarce (albo nie ma żadnego) — wczytaj go. */
+  async function maybeLoadCloudExport(slot) {
+    const L = window.SpotiLive;
+    const acc = accountOf(slot);
+    if (!L || !acc.export || state.cloudLoading === slot) return;
+    const localAt = state.exportRows.length && state.meta && !state.meta.demo ? state.meta.importedAt || 0 : 0;
+    if (acc.export.importedAt <= localAt + 1000) return;
+    state.cloudLoading = slot;
+    const status = document.getElementById('import-status');
+    if (!state.exportRows.length) status.textContent = 'Wczytuję eksport z GitHuba…';
+    try {
+      const rows = await L.loadExportRows(acc);
+      if (state.slot !== slot || !rows.length) return;
+      const meta = { format: 'extended', importedAt: acc.export.importedAt, fromCloud: true, usedFiles: acc.export.files, podcasts: 0, duplicates: 0 };
+      setData(rows, meta);
+      status.textContent = '';
+      try { await saveData(slot, { rows, meta }); } catch { /* cache nie jest konieczny */ }
+    } catch {
+      if (!state.exportRows.length) status.textContent = 'Nie udało się wczytać eksportu z GitHuba — spróbuj odświeżyć stronę.';
+    } finally {
+      state.cloudLoading = null;
+    }
+  }
+
+  function wireCloud() {
+    document.getElementById('btn-cloud').addEventListener('click', openCloud);
+    document.getElementById('cloud-close').addEventListener('click', () => document.getElementById('cloud-panel').classList.add('hidden'));
+    document.getElementById('cloud-send').addEventListener('click', cloudSend);
+    document.getElementById('cloud-remove').addEventListener('click', cloudRemove);
+    document.getElementById('cloud-forget').addEventListener('click', () => { setToken(''); setCloudMsg('Token usunięty z tej przeglądarki.'); renderCloud(); });
+    document.getElementById('cloud-token').addEventListener('keydown', (e) => { if (e.key === 'Enter') cloudSend(); });
+  }
+
   /** Podświetla w menu sekcję, którą akurat czytasz. */
   function wireScrollSpy() {
     if (!('IntersectionObserver' in window)) return;
@@ -959,6 +1099,7 @@
     loadPrefs();
     wire();
     wireScrollSpy();
+    wireCloud();
     renderAccounts();
     await loadSlot(state.slot);
     loadAccounts();

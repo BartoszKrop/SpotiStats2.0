@@ -45,13 +45,30 @@
    */
   async function loadAccounts() {
     const index = await getJson('konta.json');
+    let slots;
     if (index && Array.isArray(index.slots)) {
-      return emptySlots().map((e) => ({ ...e, ...(index.slots.find((s) => s.slot === e.slot) || {}), base: `konta/${e.slot}/` }));
+      slots = emptySlots().map((e) => ({ ...e, ...(index.slots.find((s) => s.slot === e.slot) || {}), base: `konta/${e.slot}/` }));
+    } else {
+      const legacy = await getJson('status.json');
+      slots = emptySlots().map((e) => ({ ...e, base: `konta/${e.slot}/` }));
+      if (legacy && legacy.connectedAt) slots[0] = { ...slots[0], ...legacy, name: legacy.name || null, base: '' };
     }
-    const legacy = await getJson('status.json');
-    const slots = emptySlots().map((e) => ({ ...e, base: `konta/${e.slot}/` }));
-    if (legacy && legacy.connectedAt) slots[0] = { ...slots[0], ...legacy, name: legacy.name || null, base: '' };
+    // Eksport wgrany na GitHuba (spis konta/<n>/eksport.json) — osobno od odsłuchów z automatu.
+    await Promise.all(slots.map(async (s) => {
+      const m = await getJson(`konta/${s.slot}/eksport.json`).catch(() => null);
+      if (m && Array.isArray(m.files) && m.files.length) {
+        s.export = m;
+        if (!s.name && m.name) s.name = m.name;
+      }
+    }));
     return slots;
+  }
+
+  /** Wiersze eksportu z GitHuba (zwarty format → wiersze). */
+  async function loadExportRows(account) {
+    const parts = await Promise.all(account.export.files.map((f) => getJson(`konta/${account.slot}/${f}`)));
+    if (!root.SpotiCloud) throw new Error('brak cloud.js');
+    return root.SpotiCloud.decodeRows(parts.filter(Boolean));
   }
 
   /** Surowe wiersze (format rozszerzonego eksportu) jednego konta. */
@@ -82,5 +99,5 @@
     return (Date.now() - Date.parse(account.connectedAt)) / 86_400_000;
   }
 
-  root.SpotiLive = { CLIENT_ID, SLOTS, repo, rawUrl, actionsUrl, loadAccounts, loadRows, loadArtistImages, loadAlbumCovers, tokenAgeDays, TOKEN_LIFETIME_DAYS };
+  root.SpotiLive = { CLIENT_ID, SLOTS, repo, rawUrl, actionsUrl, loadAccounts, loadRows, loadExportRows, loadArtistImages, loadAlbumCovers, tokenAgeDays, TOKEN_LIFETIME_DAYS };
 })(globalThis);
