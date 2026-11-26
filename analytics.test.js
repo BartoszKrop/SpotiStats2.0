@@ -141,3 +141,19 @@ test('ten sam utwór pod dwoma URI (singiel + album) liczy się razem', () => {
   assert.equal(tracks.length, 1);
   assert.equal(tracks[0].plays, 2);
 });
+
+test('rankTimeline: kto był nr 1 w każdym tygodniu', () => {
+  const t = (d) => new Date(2026, 0, d, 12).getTime(); // 5 sty 2026 = poniedziałek
+  const rows = [
+    { t: t(5), artist: 'A', ms: 300000 }, { t: t(6), artist: 'B', ms: 100000 },
+    { t: t(12), artist: 'B', ms: 400000 }, { t: t(13), artist: 'A', ms: 100000 }, { t: t(14), artist: 'C', ms: 50000 },
+    { t: t(19), artist: 'B', ms: 200000 }
+  ];
+  const r = A.rankTimeline(rows, new Date(2026, 0, 5).getTime(), new Date(2026, 0, 26).getTime(), 'week', { depth: 2, limit: 3 });
+  assert.deepEqual(r.leaders.map((l) => l && l.name), ['A', 'B', 'B']);
+  assert.deepEqual(r.kings, [{ name: 'B', weeks: 2 }, { name: 'A', weeks: 1 }]);
+  const byKey = Object.fromEntries(r.series.map((s) => [s.key, s.values]));
+  assert.deepEqual(byKey.B, [2, 1, 1]);
+  assert.deepEqual(byKey.A, [1, 2, null]);
+  assert.deepEqual(byKey.C, [null, null, null]); // C był 3. — poza depth=2
+});

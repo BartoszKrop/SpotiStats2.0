@@ -10,6 +10,8 @@ Statystyki słuchania Spotify w stylu stats.fm, liczone z **pełnego eksportu hi
   7/28 dni i pół roku liczone są wstecz od **ostatniego odsłuchu w danych** (eksport bywa sprzed kilku tygodni, więc „od dziś” dawałoby pusto).
 - **Top 10** wykonawców, utworów i albumów — sortowanie wg czasu albo wg liczby odtworzeń.
 - **Top 10 w czasie** — wykres liniowy minut słuchania (dni / tygodnie / miesiące) dla top 10 wykonawców albo utworów z wybranego zakresu; legenda pozwala włączać i wyłączać linie.
+- **Nr 1 tygodnia** — kto był najczęściej słuchanym wykonawcą w każdym tygodniu (albo miesiącu), wykres pozycji w rankingu i licznik tygodni na szczycie.
+- **5 kont** — Ty + 4 znajomych (limit Spotify dla prywatnych aplikacji). Każde konto ma osobny eksport w przeglądarce i osobny automat.
 - **Wykonawca w czasie** — wykres dowolnego wykonawcy (wyszukiwarka albo klik w topce), cały czas lub wybrany zakres, do tego jego najczęściej słuchane utwory.
 - Podcasty, audiobooki i wpisy bez wykonawcy są **pomijane**. Duplikaty z nakładających się plików są usuwane.
 - „Odtworzenie” liczy się od 30 s słuchania (jak w stats.fm); minuty liczą się zawsze.
@@ -18,7 +20,8 @@ Statystyki słuchania Spotify w stylu stats.fm, liczone z **pełnego eksportu hi
 
 Jak w stats.fm: eksport wczytujesz raz, a nowe odsłuchy dociągają się same.
 
-- Workflow `.github/workflows/spotify-sync.yml` co godzinę pyta Spotify o 50 ostatnich utworów (`/me/player/recently-played`) i dopisuje nowe do `odsluchy/<rok>.json` na gałęzi **`dane`** (publicznej, jak profil stats.fm).
+- Workflow `.github/workflows/spotify-sync.yml` co godzinę pyta Spotify o 50 ostatnich utworów każdego podłączonego konta (`/me/player/recently-played`) i dopisuje nowe do `konta/<n>/odsluchy/<rok>.json` na gałęzi **`dane`** (publicznej, jak profil stats.fm). Spis kont: `konta.json`.
+- Znajomego dodajesz: developer.spotify.com → Twoja aplikacja → User Management, potem wysyłasz mu link `spotify.html?konto=<n>`, a kod, który odeśle, wklejasz w **Run workflow** z wybranym kontem.
 - Strona przy otwarciu pobiera te pliki i dokłada odsłuchy **nowsze niż koniec eksportu**, więc nic się nie dubluje. Świeży eksport zawsze ma pierwszeństwo.
 - Refresh token leży na gałęzi `dane` zaszyfrowany (AES-256-GCM) kluczem z sekretu `SPOTIFY_CLIENT_SECRET`.
 - API nie mówi, ile utworu faktycznie słuchano (zwraca tylko te grane ≥30 s), więc przyjmowana jest jego pełna długość.

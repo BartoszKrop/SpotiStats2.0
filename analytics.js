@@ -281,7 +281,57 @@
     return top(rows, 'artist', { limit: 0 }).map((a) => a.name);
   }
 
+  /**
+   * Ranking wykonawców w każdym kubełku (tydzień/miesiąc).
+   * Zwraca:
+   *   buckets  — początki kubełków,
+   *   leaders  — dla każdego kubełka { name, ms } nr 1 (albo null, gdy nic nie grało),
+   *   kings    — [{ name, weeks }] kto ile razy był nr 1 (malejąco),
+   *   series   — [{ key, values }] pozycje 1..depth (null = poza topką) dla `limit` wykonawców,
+   *              którzy najczęściej byli nr 1 (dobierani dalej wg łącznego czasu).
+   */
+  function rankTimeline(rows, from, to, unit, { depth = 10, limit = 6, sortBy = 'ms' } = {}) {
+    const buckets = bucketList(from, to, unit);
+    const index = new Map(buckets.map((b, i) => [b, i]));
+    const per = buckets.map(() => new Map());
+    for (const r of rows) {
+      if (r.t < from || r.t >= to) continue;
+      const i = index.get(bucketStart(r.t, unit));
+      if (i === undefined) continue;
+      let e = per[i].get(r.artist);
+      if (!e) per[i].set(r.artist, (e = { ms: 0, plays: 0 }));
+      e.ms += r.ms;
+      if (r.ms >= MIN_STREAM_MS) e.plays++;
+    }
+    const metric = sortBy === 'plays' ? 'plays' : 'ms';
+    const other = metric === 'ms' ? 'plays' : 'ms';
+    const rankings = per.map((m) =>
+      [...m.entries()].sort((a, b) => b[1][metric] - a[1][metric] || b[1][other] - a[1][other] || a[0].localeCompare(b[0])));
+    const leaders = rankings.map((list) => (list.length ? { name: list[0][0], ms: list[0][1].ms, plays: list[0][1].plays } : null));
+
+    const kingCount = new Map();
+    for (const l of leaders) if (l) kingCount.set(l.name, (kingCount.get(l.name) || 0) + 1);
+    const kings = [...kingCount.entries()].map(([name, weeks]) => ({ name, weeks })).sort((a, b) => b.weeks - a.weeks || a.name.localeCompare(b.name));
+
+    const chosen = kings.slice(0, limit).map((k) => k.name);
+    if (chosen.length < limit) {
+      for (const a of top(rows.filter((r) => r.t >= from && r.t < to), 'artist', { sortBy, limit: limit * 2 })) {
+        if (chosen.length >= limit) break;
+        if (!chosen.includes(a.name)) chosen.push(a.name);
+      }
+    }
+    const series = chosen.map((name) => ({
+      key: name,
+      values: rankings.map((list) => {
+        const pos = list.findIndex(([n]) => n === name);
+        return pos >= 0 && pos < depth ? pos + 1 : null;
+      })
+    }));
+    return { buckets, leaders, kings, series };
+  }
+
   const API = {
+    rankTimeline,
     MIN_STREAM_MS,
     trackKey,
     classifyFile,

@@ -14,8 +14,10 @@
   const IDB_NAME = 'SpotiStats';
   const IDB_VERSION = 2;
   const IDB_STORE = 'history';
-  const IDB_KEY = 'me';
   const PREFS_KEY = 'ss_prefs';
+  /** Konto nr 1 zostaje pod starym kluczem, żeby nie zgubić wczytanego już eksportu. */
+  const idbKey = (slot) => (slot === 1 ? 'me' : `konto-${slot}`);
+  const SPOTIFY_GREEN = '#1ed760';
 
   // Kolejność kolorów serii (paleta na ciemne tło, sprawdzona pod kątem daltonizmu).
   const SERIES_COLORS = ['#338ced', '#e76624', '#00a888', '#d28e05', '#e24d8b', '#0aac23', '#9887ef', '#eb6263'];
@@ -41,19 +43,25 @@
     visibleFor: '',
     artist: '',
     artistSpan: 'all',
-    artistUnit: null
+    artistUnit: null,
+    kingsUnit: null, // null = automatycznie (tygodnie do roku, dłużej miesiące)
+    slot: 1,
+    accounts: null, // z konta.json (null = jeszcze nie wczytane / brak sieci)
+    liveCache: new Map() // slot -> znormalizowane wiersze z automatu
   };
 
   function loadPrefs() {
     try {
       const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
-      for (const k of ['range', 'year', 'sortBy', 'topKind', 'artist', 'artistSpan']) if (p[k] != null) state[k] = p[k];
+      for (const k of ['range', 'year', 'sortBy', 'topKind', 'artist', 'artistSpan', 'slot']) if (p[k] != null) state[k] = p[k];
+      const q = Number(new URLSearchParams(location.search).get('konto'));
+      if (q >= 1 && q <= 5) state.slot = q;
     } catch { /* brak dostępu do localStorage — trudno */ }
   }
   function savePrefs() {
     try {
-      const { range, year, sortBy, topKind, artist, artistSpan } = state;
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ range, year, sortBy, topKind, artist, artistSpan }));
+      const { range, year, sortBy, topKind, artist, artistSpan, slot } = state;
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ range, year, sortBy, topKind, artist, artistSpan, slot }));
     } catch { /* ignoruj */ }
   }
 
@@ -79,9 +87,9 @@
       tx.onabort = () => reject(tx.error);
     });
   }
-  const saveData = (data) => idb('readwrite', (s) => s.put(data, IDB_KEY));
-  const loadData = () => idb('readonly', (s) => s.get(IDB_KEY));
-  const clearData = () => idb('readwrite', (s) => s.delete(IDB_KEY));
+  const saveData = (slot, data) => idb('readwrite', (s) => s.put(data, idbKey(slot)));
+  const loadData = (slot) => idb('readonly', (s) => s.get(idbKey(slot)));
+  const clearData = (slot) => idb('readwrite', (s) => s.delete(idbKey(slot)));
 
   // ─────────────────────────────────────────────────────── IMPORT
   async function readFiles(fileList) {
@@ -125,7 +133,7 @@
         return;
       }
       const meta = { ...report, errors, importedAt: Date.now() };
-      await saveData({ rows, meta });
+      await saveData(state.slot, { rows, meta });
       setData(rows, meta);
       status.textContent = '';
     } catch (err) {
@@ -177,6 +185,52 @@
     });
   }
 
+  // ─────────────────────────────────────────────────────── AWATARY I KONTA
+  function hueOf(name) {
+    // FNV-1a + mieszanie, żeby podobne nazwy („Artist A”, „Artist B”) dostawały wyraźnie różne kolory.
+    let h = 0x811c9dc5;
+    for (const ch of String(name)) h = Math.imul(h ^ ch.codePointAt(0), 0x01000193) >>> 0;
+    h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d) >>> 0; h ^= h >>> 12;
+    return h % 360;
+  }
+  function initials(name) {
+    const parts = String(name).replace(/[^\p{L}\p{N} ]/gu, ' ').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '♪';
+    return (parts[0][0] + (parts.length > 1 ? parts[1][0] : '')).toUpperCase();
+  }
+  function avatar(name, cls = '') {
+    return `<span class="avatar ${cls}" style="--h:${hueOf(name)}" aria-hidden="true">${esc(initials(name))}</span>`;
+  }
+
+  function accountOf(slot) {
+    return (state.accounts || []).find((a) => a.slot === slot) || { slot, name: null };
+  }
+  function accountName(slot) {
+    const a = accountOf(slot);
+    if (a.name) return a.name;
+    if (a.connectedAt) return slot === 1 ? 'Ty' : `Konto ${slot}`;
+    return slot === 1 ? 'Ty' : null;
+  }
+  function slotHasData(slot) {
+    return Boolean(accountOf(slot).connectedAt) || slot === state.slot && state.exportRows.length > 0;
+  }
+
+  function renderAccounts() {
+    const list = document.getElementById('account-list');
+    const items = [];
+    for (let slot = 1; slot <= 5; slot++) {
+      const name = accountName(slot);
+      const a = accountOf(slot);
+      const active = slot === state.slot;
+      const sub = a.connectedAt ? (a.error ? 'automat: błąd' : 'automat działa') : name ? 'tylko eksport' : 'wolne miejsce';
+      items.push(`<li><button type="button" class="account${active ? ' is-active' : ''}${name ? '' : ' is-empty'}" data-slot="${slot}" aria-current="${active}">
+        ${name ? avatar(name, 'avatar--sm') : '<span class="avatar avatar--sm avatar--empty" aria-hidden="true">+</span>'}
+        <span class="account-text"><span class="account-name">${esc(name || `Wolne miejsce ${slot}`)}</span><span class="account-sub">${sub}</span></span>
+      </button></li>`);
+    }
+    list.innerHTML = items.join('');
+  }
+
   // ─────────────────────────────────────────────────────── RENDER
   /** Eksport (z IndexedDB) + odsłuchy dociągnięte automatem, tylko te nowsze niż koniec eksportu. */
   function setData(rows, meta) {
@@ -188,8 +242,9 @@
   function recombine() {
     const exp = state.exportRows;
     const exportEnd = exp.length ? exp[exp.length - 1].t : -Infinity;
+    const live = state.liveCache.get(state.slot) || [];
     // Demo nie miesza się z prawdziwymi danymi.
-    const extra = state.meta && state.meta.demo ? [] : state.liveRows.filter((r) => r.t > exportEnd);
+    const extra = state.meta && state.meta.demo ? [] : live.filter((r) => r.t > exportEnd);
     state.liveAdded = extra.length;
     const rows = extra.length ? exp.concat(extra) : exp; // obie listy posortowane, a extra jest później
     state.rows = rows;
@@ -206,8 +261,9 @@
     document.getElementById('state-empty').classList.toggle('hidden', has);
     document.getElementById('state-data').classList.toggle('hidden', !has);
     document.getElementById('topbar-actions').classList.toggle('hidden', !has);
+    renderAccounts();
     renderLiveBanner();
-    if (!has) return;
+    if (!has) { renderEmpty(); renderHero(null); return; }
 
     const m = state.meta || {};
     const parts = [`${nf.format(state.rows.length)} odsłuchów`];
@@ -217,25 +273,40 @@
     document.getElementById('data-info').textContent = parts.join(' · ');
     document.getElementById('data-info').title = m.usedFiles ? `Wczytane pliki:\n${m.usedFiles.join('\n')}` : '';
 
-    document.querySelectorAll('#range-pills .pill').forEach((p) => p.classList.toggle('pill--active', p.dataset.range === state.range));
+    document.querySelectorAll('#range-pills .chip').forEach((p) => p.classList.toggle('is-active', p.dataset.range === state.range));
     document.getElementById('year-select').value = String(state.year);
-    document.querySelectorAll('#sort-pills .pill').forEach((p) => p.classList.toggle('pill--active', p.dataset.sort === state.sortBy));
+    document.querySelectorAll('#sort-pills .chip').forEach((p) => p.classList.toggle('is-active', p.dataset.sort === state.sortBy));
 
     const { from, to } = currentBounds();
     const slice = A.sliceRange(state.rows, from, to);
     const lastTs = state.rows[state.rows.length - 1].t;
     let label = fmtSpan(from, to);
-    if (state.range !== 'year' && state.range !== 'all') label += ` · liczone wstecz od ostatniego odsłuchu w danych (${fmtDate(lastTs)})`;
+    if (state.range !== 'year' && state.range !== 'all') label += ` · liczone wstecz od ostatniego odsłuchu (${fmtDate(lastTs)})`;
     document.getElementById('range-label').textContent = label;
 
-    renderKpis(slice, from, to);
+    const sum = A.summary(slice, from, to);
+    renderHero(sum);
+    renderKpis(sum);
     renderTops(slice);
+    renderKings(slice, from, to);
     renderTopChart(slice, from, to);
     renderArtist(from, to);
   }
 
-  function renderKpis(slice, from, to) {
-    const s = A.summary(slice, from, to);
+  const RANGE_NAMES = { '7d': 'w ostatnich 7 dniach', '28d': 'w ostatnich 28 dniach', '6m': 'w ostatnim półroczu', all: 'od początku' };
+
+  function renderHero(sum) {
+    const name = state.meta && state.meta.demo ? 'Dane przykładowe' : accountName(state.slot) || `Wolne miejsce ${state.slot}`;
+    document.getElementById('hero-name').textContent = name;
+    document.getElementById('hero-avatar').outerHTML = `<div id="hero-avatar" class="avatar avatar--xl" style="--h:${hueOf(name)}" aria-hidden="true">${esc(initials(name))}</div>`;
+    document.getElementById('hero').style.setProperty('--h', hueOf(name));
+    const when = state.range === 'year' ? `w ${state.year} roku` : RANGE_NAMES[state.range];
+    document.getElementById('hero-sub').textContent = sum
+      ? `${nf.format(minutes(sum.ms))} minut · ${nf.format(sum.plays)} odtworzeń · ${nf.format(sum.artists)} wykonawców ${when}`
+      : 'Brak danych dla tego konta';
+  }
+
+  function renderKpis(s) {
     const kpi = (label, value, sub) => `<div class="kpi-card"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div>${sub ? `<div class="kpi-sub">${sub}</div>` : ''}</div>`;
     document.getElementById('kpi-row').innerHTML = [
       kpi('Minuty', nf.format(minutes(s.ms)), `${nf.format(Math.round(s.ms / 3_600_000))} godz.`),
@@ -246,27 +317,85 @@
     ].join('');
   }
 
-  function barList(items, kind) {
+  const valueOf = (it) => (state.sortBy === 'plays' ? `${nf.format(it.plays)} odtw.` : `${nf.format(minutes(it.ms))} min`);
+
+  /** Lista w stylu tracklisty: numer, okładka, tytuł + wykonawca, wartość. */
+  function trackList(items, kind) {
     if (!items.length) return '<p class="no-data">Brak odsłuchów w tym zakresie.</p>';
-    const metric = state.sortBy === 'plays' ? 'plays' : 'ms';
-    const max = Math.max(...items.map((i) => i[metric]), 1);
-    return `<ol class="bar-list">${items.map((it, i) => {
-      const pct = Math.max((it[metric] / max) * 100, 2);
-      const sub = kind === 'artist' ? '' : `<span class="bar-sub">${esc(it.artist)}</span>`;
-      const meta = `${nf.format(minutes(it.ms))} min · ${nf.format(it.plays)}×`;
-      const clickable = kind === 'artist' ? ` data-artist="${esc(it.name)}" tabindex="0" role="button" title="Pokaż wykres: ${esc(it.name)}"` : '';
-      return `<li class="bar-item${kind === 'artist' ? ' bar-item--link' : ''}"${clickable}>
-        <div class="bar-top"><span class="bar-rank">${i + 1}</span><span class="bar-name">${esc(it.name)}${sub}</span><span class="bar-meta">${meta}</span></div>
-        <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+    return `<ol class="tracklist">${items.map((it, i) => {
+      const other = state.sortBy === 'plays' ? `${nf.format(minutes(it.ms))} min` : `${nf.format(it.plays)} odtw.`;
+      return `<li class="track-row" data-artist="${esc(it.artist)}" tabindex="0" role="button" title="Pokaż wykres: ${esc(it.artist)}">
+        <span class="track-rank">${i + 1}</span>
+        ${avatar(kind === 'album' ? it.name : `${it.name} ${it.artist}`, 'avatar--cover')}
+        <span class="track-text"><span class="track-name">${esc(it.name)}</span><span class="track-sub">${esc(it.artist)}</span></span>
+        <span class="track-val" title="${other}">${valueOf(it)}</span>
       </li>`;
     }).join('')}</ol>`;
   }
 
+  function artistGrid(items) {
+    if (!items.length) return '<p class="no-data">Brak odsłuchów w tym zakresie.</p>';
+    return items.map((it, i) => `<button type="button" class="artist-card" data-artist="${esc(it.name)}" title="Pokaż wykres: ${esc(it.name)}">
+        ${avatar(it.name, 'avatar--lg')}
+        <span class="artist-card__name"><span class="artist-card__rank">${i + 1}.</span> ${esc(it.name)}</span>
+        <span class="artist-card__sub">${valueOf(it)}</span>
+      </button>`).join('');
+  }
+
   function renderTops(slice) {
     const opts = { sortBy: state.sortBy, limit: 10 };
-    document.getElementById('top-artists').innerHTML = barList(A.top(slice, 'artist', opts), 'artist');
-    document.getElementById('top-tracks').innerHTML = barList(A.top(slice, 'track', opts), 'track');
-    document.getElementById('top-albums').innerHTML = barList(A.top(slice, 'album', opts), 'album');
+    document.getElementById('top-artists').innerHTML = artistGrid(A.top(slice, 'artist', opts));
+    document.getElementById('top-tracks').innerHTML = trackList(A.top(slice, 'track', opts), 'track');
+    document.getElementById('top-albums').innerHTML = trackList(A.top(slice, 'album', opts), 'album');
+  }
+
+  // ─────────────────────────────────────────────────────── NR 1 TYGODNIA
+  function renderKings(slice, from, to) {
+    const span = (to - from) / 86_400_000;
+    const allowed = { week: span >= 14, month: span >= 60 };
+    const auto = span > 400 && allowed.month ? 'month' : 'week';
+    const unit = state.kingsUnit && allowed[state.kingsUnit] ? state.kingsUnit : auto;
+    syncSeg('kings-unit', 'unit', unit, allowed);
+    const r = A.rankTimeline(slice, from, to, unit, { depth: 10, limit: 6, sortBy: state.sortBy });
+    const unitWord = unit === 'month' ? ['miesiąc', 'miesiące', 'miesięcy', 'w tym miesiącu'] : ['tydzień', 'tygodnie', 'tygodni', 'w tym tygodniu'];
+    const plural = (n) => (n === 1 ? unitWord[0] : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? unitWord[1] : unitWord[2]);
+
+    // Aktualny nr 1 i jego seria z rzędu
+    const lastIdx = r.leaders.map((l, i) => (l ? i : -1)).filter((i) => i >= 0).pop();
+    const now = lastIdx != null ? r.leaders[lastIdx] : null;
+    let streak = 0;
+    if (now) for (let i = lastIdx; i >= 0 && r.leaders[i] && r.leaders[i].name === now.name; i--) streak++;
+    document.getElementById('kings-now').innerHTML = now
+      ? `<button type="button" class="kings-now__card" data-artist="${esc(now.name)}">${avatar(now.name, 'avatar--lg')}
+          <span><span class="kicker">Nr 1 ${lastIdx === r.leaders.length - 1 ? unitWord[3] : 'ostatnio'}</span>
+          <span class="kings-now__name">${esc(now.name)}</span>
+          <span class="kings-now__sub">${streak > 1 ? `${streak} ${plural(streak)} z rzędu · ` : ''}${nf.format(minutes(now.ms))} min</span></span></button>`
+      : '<p class="no-data">Brak odsłuchów.</p>';
+
+    const maxW = Math.max(1, ...r.kings.map((k) => k.weeks));
+    document.getElementById('kings-list').innerHTML = r.kings.slice(0, 8).map((k) =>
+      `<li class="kings-row" data-artist="${esc(k.name)}" tabindex="0" role="button">
+        ${avatar(k.name, 'avatar--sm')}<span class="kings-row__name">${esc(k.name)}</span>
+        <span class="kings-row__bar"><span style="width:${(k.weeks / maxW) * 100}%"></span></span>
+        <span class="kings-row__val">${k.weeks} ${plural(k.weeks)}</span></li>`).join('') || '<li class="no-data">—</li>';
+
+    const colors = new Map(r.series.map((s, i) => [s.key, SERIES_COLORS[i]]));
+    document.getElementById('kings-legend').innerHTML = r.series.map((s) =>
+      `<span class="legend-item legend-item--static"><span class="swatch" style="background:${colors.get(s.key)}"></span>${esc(s.key)}</span>`).join('');
+    const chartEl = document.getElementById('kings-chart');
+    if (r.buckets.length < 3) {
+      chartEl.innerHTML = `<p class="no-data">Za krótki zakres na wykres — wybierz pół roku, rok albo cały czas.</p>`;
+      return;
+    }
+    C.lineChart(chartEl, {
+      buckets: r.buckets,
+      unit,
+      rank: true,
+      maxRank: 10,
+      height: 320,
+      series: r.series.map((s) => ({ name: s.key, color: colors.get(s.key), values: s.values })),
+      tipExtra: (i) => (r.leaders[i] ? `<div class="chart-tip__lead">👑 ${esc(r.leaders[i].name)} · ${nf.format(minutes(r.leaders[i].ms))} min</div>` : '')
+    });
   }
 
   /** Kolory trzymają się danej pozycji (nie miejsca w rankingu), dopóki jest widoczna. */
@@ -345,7 +474,7 @@
 
     body.innerHTML = `
       <div class="artist-head">
-        <h3 class="artist-name">${esc(details.artist)}</h3>
+        <div class="artist-id">${avatar(details.artist, 'avatar--lg')}<h3 class="artist-name">${esc(details.artist)}</h3></div>
         <dl class="artist-facts">
           <div><dt>Łącznie</dt><dd>${nf.format(minutes(details.ms))} min · ${nf.format(details.plays)}×</dd></div>
           <div><dt>W wybranym zakresie</dt><dd>${nf.format(minutes(rangeStats.ms))} min · ${nf.format(rangeStats.plays)}×</dd></div>
@@ -355,7 +484,7 @@
       </div>
       <div id="artist-chart"></div>
       <h4 class="sub-title">Najczęściej słuchane utwory (wybrany zakres)</h4>
-      <div id="artist-tracks">${barList(tops, 'track')}</div>`;
+      <div id="artist-tracks">${trackList(tops, 'track')}</div>`;
 
     const own = state.rows.filter((r) => r.artist === state.artist);
     const tl = A.timeline(own, from, to, unit, [{ key: state.artist, match: () => true }]);
@@ -363,7 +492,7 @@
       buckets: tl.buckets,
       unit,
       area: true,
-      series: [{ name: state.artist, color: SERIES_COLORS[0], values: tl.series[0].values }]
+      series: [{ name: state.artist, color: SPOTIFY_GREEN, values: tl.series[0].values }]
     });
   }
 
@@ -427,18 +556,19 @@
 
     document.getElementById('btn-clear-data').addEventListener('click', async () => {
       if (!confirm('Usunąć wczytaną historię z tej przeglądarki?')) return;
-      try { await clearData(); } catch { /* ignoruj */ }
+      try { await clearData(state.slot); } catch { /* ignoruj */ }
       state.meta = null;
       setData([], null);
     });
 
     document.getElementById('btn-load-demo').addEventListener('click', () => {
       const rows = demoRows();
+      state.artist = '';
       setData(rows, { demo: true, usedFiles: ['dane przykładowe'] });
     });
 
     document.getElementById('range-pills').addEventListener('click', (e) => {
-      const pill = e.target.closest('button.pill');
+      const pill = e.target.closest('button.chip');
       if (!pill) return;
       state.range = pill.dataset.range;
       savePrefs();
@@ -449,7 +579,7 @@
     yearSelect.addEventListener('click', () => { if (state.range !== 'year') { state.range = 'year'; state.year = Number(yearSelect.value); savePrefs(); render(); } });
 
     document.getElementById('sort-pills').addEventListener('click', (e) => {
-      const pill = e.target.closest('button.pill');
+      const pill = e.target.closest('button.chip');
       if (!pill) return;
       state.sortBy = pill.dataset.sort;
       savePrefs();
@@ -484,8 +614,34 @@
       const el = e.target.closest('[data-artist]');
       if (el) selectArtist(el.dataset.artist, true);
     };
-    document.getElementById('top-artists').addEventListener('click', onArtistPick);
-    document.getElementById('top-artists').addEventListener('keydown', (e) => { if (e.key === 'Enter') onArtistPick(e); });
+    for (const id of ['top-artists', 'top-tracks', 'top-albums', 'kings-now', 'kings-list', 'artist-tracks-wrap']) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      el.addEventListener('click', onArtistPick);
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter') onArtistPick(e); });
+    }
+
+    document.getElementById('kings-unit').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b || b.disabled) return;
+      state.kingsUnit = b.dataset.unit;
+      savePrefs();
+      render();
+    });
+
+    document.getElementById('account-list').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-slot]');
+      if (!b) return;
+      const slot = Number(b.dataset.slot);
+      if (slot !== state.slot) loadSlot(slot);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    document.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-copy]');
+      if (!b) return;
+      try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Skopiowano ✓'; } catch { /* ignoruj */ }
+    });
 
     const search = document.getElementById('artist-search');
     const commit = () => {
@@ -521,46 +677,95 @@
     });
   }
 
-  // ─────────────────────────────────────────────────────── AUTOMAT (gałąź „dane”)
-  async function loadLive() {
+  // ─────────────────────────────────────────────────────── KONTA I AUTOMAT (gałąź „dane”)
+  function pageUrl(path) {
+    return new URL(path, location.href).href.replace(/\?.*$/, '');
+  }
+
+  function renderEmpty() {
+    const slot = state.slot;
+    const free = !accountName(slot);
+    document.getElementById('empty-title').textContent = slot === 1
+      ? 'Wczytaj swoją historię ze Spotify'
+      : free ? `Wolne miejsce nr ${slot}` : `Wczytaj eksport: ${accountName(slot)}`;
+    const help = document.getElementById('friend-help');
+    help.classList.toggle('hidden', slot === 1);
+    if (slot === 1) return;
+    const link = `${pageUrl('./spotify.html')}?konto=${slot}`;
+    help.innerHTML = `
+      <h3>Jak podłączyć tu znajomego (automat)</h3>
+      <ol>
+        <li>Na <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> otwórz swoją aplikację → <b>User Management</b> i dopisz imię oraz e-mail jego konta Spotify.</li>
+        <li>Wyślij mu ten link — zaloguje się i dostanie kod:
+          <span class="copy-row"><input class="field-input" readonly value="${esc(link)}" /><button type="button" class="btn btn--outline btn--sm" data-copy="${esc(link)}">Kopiuj</button></span></li>
+        <li>Kod, który Ci odeśle, wklej w <a href="${esc(window.SpotiLive ? window.SpotiLive.actionsUrl() : '#')}" target="_blank" rel="noopener">Run workflow</a>, wybierz konto <b>${slot}</b> i wpisz jego imię.</li>
+      </ol>
+      <p class="setup-note">Możesz też po prostu wrzucić tu jego plik .zip z eksportem — zostanie tylko w Twojej przeglądarce.</p>`;
+  }
+
+  async function loadSlot(slot) {
+    state.slot = slot;
+    state.artist = '';
+    savePrefs();
+    let stored = null;
+    try { stored = await loadData(slot); } catch { /* IndexedDB niedostępne */ }
+    if (state.slot !== slot) return; // użytkownik zdążył przełączyć dalej
+    state.exportRows = stored && stored.rows ? stored.rows : [];
+    state.meta = stored ? stored.meta : null;
+    document.getElementById('import-status').textContent = '';
+    recombine();
+    loadLiveFor(slot);
+  }
+
+  async function loadLiveFor(slot) {
+    const L = window.SpotiLive;
+    if (!L || !state.accounts || state.liveCache.has(slot)) return;
+    const acc = accountOf(slot);
+    if (!acc.files || !acc.files.length) return;
+    try {
+      const rows = A.normalizeRows(await L.loadRows(acc)).rows;
+      state.liveCache.set(slot, rows);
+      if (state.slot === slot) recombine();
+    } catch { /* brak sieci — zostaje sam eksport */ }
+  }
+
+  async function loadAccounts() {
     const L = window.SpotiLive;
     if (!L || location.protocol === 'file:') return;
     try {
-      const status = await L.loadStatus();
-      state.liveStatus = status || { missing: true };
-      if (status && status.files && status.files.length) {
-        state.liveRows = A.normalizeRows(await L.loadRows(status)).rows;
-      }
+      state.accounts = await L.loadAccounts();
     } catch {
-      state.liveStatus = { offline: true };
+      state.accounts = null;
+      return;
     }
-    recombine();
+    render();
+    loadLiveFor(state.slot);
   }
 
   function renderLiveBanner() {
     const el = document.getElementById('live-banner');
-    const s = state.liveStatus;
     const L = window.SpotiLive;
+    const s = state.accounts ? accountOf(state.slot) : null;
     let html = '';
     let warn = false;
-    if (!s || s.offline) {
+    if (!s || (state.meta && state.meta.demo)) {
       html = '';
-    } else if (s.missing || !s.connectedAt) {
+    } else if (!s.connectedAt) {
       html = 'Nowe odsłuchy mogą się dociągać same — <a href="./spotify.html">włącz automat</a>.';
     } else if (s.error === 'invalid_grant') {
       warn = true;
-      html = '⚠️ Logowanie automatu do Spotify wygasło, więc nowe odsłuchy się nie dociągają. <a href="./spotify.html">Zaloguj się ponownie</a>.';
+      html = `⚠️ Logowanie automatu do Spotify wygasło, więc nowe odsłuchy się nie dociągają. <a href="./spotify.html?konto=${state.slot}">Zaloguj się ponownie</a>.`;
     } else if (L.tokenAgeDays(s) > L.TOKEN_LIFETIME_DAYS - 14) {
       warn = true;
-      html = `⚠️ Logowanie automatu do Spotify wygaśnie za ok. ${Math.max(0, Math.round(L.TOKEN_LIFETIME_DAYS - L.tokenAgeDays(s)))} dni. <a href="./spotify.html">Odnów je</a>.`;
+      html = `⚠️ Logowanie automatu do Spotify wygaśnie za ok. ${Math.max(0, Math.round(L.TOKEN_LIFETIME_DAYS - L.tokenAgeDays(s)))} dni. <a href="./spotify.html?konto=${state.slot}">Odnów je</a>.`;
     } else if (s.error) {
       warn = true;
       html = `⚠️ Ostatnia synchronizacja się nie udała. <a href="./spotify.html">Szczegóły</a>.`;
     } else if (s.lastSync) {
       const ago = Math.floor((Date.now() - Date.parse(s.lastSync)) / 3_600_000);
       warn = ago > 6;
-      html = `${warn ? '⚠️' : '🟢'} Automat: ostatnia synchronizacja ${ago < 1 ? 'mniej niż godzinę' : `${ago} godz.`} temu` +
-        (state.liveAdded ? `, dołożył ${nf.format(state.liveAdded)} odsłuchów po końcu eksportu.` : '.') +
+      html = `${warn ? '⚠️' : '<span class="live-dot"></span>'} Automat: ostatnia synchronizacja ${ago < 1 ? 'mniej niż godzinę' : `${ago} godz.`} temu` +
+        (state.liveAdded ? `, dołożył ${nf.format(state.liveAdded)} odsłuchów${state.exportRows.length ? ' po końcu eksportu' : ''}.` : '.') +
         (warn ? ' Coś się zacięło — <a href="./spotify.html">sprawdź</a>.' : '');
     }
     el.innerHTML = html;
@@ -571,12 +776,9 @@
   async function init() {
     loadPrefs();
     wire();
-    try {
-      const stored = await loadData();
-      if (stored && stored.rows && stored.rows.length) setData(stored.rows, stored.meta);
-      else render();
-    } catch { render(); /* IndexedDB niedostępne — zaczynamy od zera */ }
-    loadLive();
+    renderAccounts();
+    await loadSlot(state.slot);
+    loadAccounts();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

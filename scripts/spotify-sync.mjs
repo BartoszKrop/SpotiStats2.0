@@ -2,24 +2,29 @@
 /*
  * Automatyczne dociąganie odsłuchów ze Spotify (uruchamiane przez GitHub Actions).
  *
- *   node scripts/spotify-sync.mjs connect <katalog-danych>   — jednorazowo: wymienia kod z logowania na token
- *   node scripts/spotify-sync.mjs sync <katalog-danych>      — co godzinę: dopisuje nowe odsłuchy
+ *   node scripts/spotify-sync.mjs connect <katalog-danych>   — wymienia kod z logowania na token (konto SPOTIFY_SLOT)
+ *   node scripts/spotify-sync.mjs sync <katalog-danych>      — co godzinę: dopisuje nowe odsłuchy wszystkich kont
+ *   node scripts/spotify-sync.mjs disconnect <katalog-danych> — usuwa konto SPOTIFY_SLOT (token i odsłuchy)
  *
  * Zmienne środowiskowe: SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_CODE (connect),
+ * SPOTIFY_SLOT (1–5), SPOTIFY_NAME (opcjonalna nazwa konta),
  * GITHUB_REPOSITORY (do ustalenia adresu powrotu na GitHub Pages).
  *
  * Układ katalogu danych (gałąź „dane”):
- *   status.json           — kiedy ostatnia synchronizacja, kiedy połączono, ewentualny błąd
- *   token.json            — refresh token zaszyfrowany AES-256-GCM kluczem z SPOTIFY_CLIENT_SECRET
- *   odsluchy/<rok>.json   — odsłuchy w formacie rozszerzonego eksportu Spotify
+ *   konta.json                     — lista 5 miejsc: kto jest podłączony, stan, pliki
+ *   konta/<n>/status.json          — kiedy ostatnia synchronizacja, kiedy połączono, ewentualny błąd
+ *   konta/<n>/token.json           — refresh token zaszyfrowany AES-256-GCM kluczem z SPOTIFY_CLIENT_SECRET
+ *   konta/<n>/odsluchy/<rok>.json  — odsłuchy w formacie rozszerzonego eksportu Spotify
  */
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const RECENT_URL = 'https://api.spotify.com/v1/me/player/recently-played?limit=50';
+const ME_URL = 'https://api.spotify.com/v1/me';
+export const SLOTS = 5; // tryb developerski Spotify: właściciel + 4 osoby
 
 // ─────────────────────────────────────────────── szyfrowanie tokenu
 
@@ -121,6 +126,13 @@ export async function connect(dir, env = process.env) {
   await writeJson(join(dir, 'token.json'), encryptToken(tokens.refresh_token, env.SPOTIFY_CLIENT_SECRET));
   const status = await readJson(join(dir, 'status.json'), {});
   Object.assign(status, { connectedAt: new Date().toISOString(), error: null, errorAt: null });
+  if (env.SPOTIFY_NAME && env.SPOTIFY_NAME.trim()) status.name = env.SPOTIFY_NAME.trim().slice(0, 40);
+  else if (!status.name) {
+    try {
+      const me = await fetch(ME_URL, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+      if (me.ok) status.name = ((await me.json()).display_name || '').slice(0, 40) || null;
+    } catch { /* nazwa nie jest konieczna */ }
+  }
   await writeJson(join(dir, 'status.json'), status);
   console.log('Połączono ze Spotify. Token zapisany (zaszyfrowany).');
   // Od razu pierwsza synchronizacja.
@@ -185,11 +197,83 @@ export async function sync(dir, env = process.env, accessToken = null) {
   }
 }
 
+// ─────────────────────────────────────────────── wiele kont
+
+const exists = (p) => stat(p).then(() => true, () => false);
+const slotDir = (root, slot) => join(root, 'konta', String(slot));
+
+function parseSlot(env) {
+  const slot = Number(env.SPOTIFY_SLOT || 1);
+  if (!Number.isInteger(slot) || slot < 1 || slot > SLOTS) throw new Error(`Numer konta musi być od 1 do ${SLOTS}.`);
+  return slot;
+}
+
+/** Dane z pierwszej wersji (jedno konto w katalogu głównym) przenosimy do konta nr 1. */
+export async function migrateLegacy(root) {
+  if (!(await exists(join(root, 'token.json'))) || (await exists(join(slotDir(root, 1), 'token.json')))) return false;
+  await mkdir(slotDir(root, 1), { recursive: true });
+  for (const name of ['token.json', 'status.json', 'odsluchy']) {
+    if (await exists(join(root, name))) await rename(join(root, name), join(slotDir(root, 1), name));
+  }
+  console.log('Przeniesiono dotychczasowe dane do konta nr 1.');
+  return true;
+}
+
+/** konta.json — publiczny spis miejsc, z którego korzysta strona. */
+export async function writeIndex(root) {
+  const list = [];
+  for (let slot = 1; slot <= SLOTS; slot++) {
+    const st = await readJson(join(slotDir(root, slot), 'status.json'), null);
+    list.push(st && st.connectedAt
+      ? { slot, name: st.name || `Konto ${slot}`, connectedAt: st.connectedAt, lastSync: st.lastSync || null, lastPlayedAt: st.lastPlayedAt || null, error: st.error || null, files: st.files || [] }
+      : { slot, name: null });
+  }
+  await writeJson(join(root, 'konta.json'), { slots: list, updatedAt: new Date().toISOString() });
+  return list;
+}
+
+export async function connectSlot(root, env = process.env) {
+  const slot = parseSlot(env);
+  await migrateLegacy(root);
+  await connect(slotDir(root, slot), env);
+  await writeIndex(root);
+  console.log(`Konto nr ${slot} połączone.`);
+}
+
+export async function syncAll(root, env = process.env) {
+  await migrateLegacy(root);
+  const failures = [];
+  let connected = 0;
+  for (let slot = 1; slot <= SLOTS; slot++) {
+    const dir = slotDir(root, slot);
+    if (!(await exists(join(dir, 'token.json')))) continue;
+    connected++;
+    try {
+      await sync(dir, env);
+    } catch (err) {
+      console.error(`Konto ${slot}: ${err.message}`);
+      // Wygasłe logowanie jednej osoby to nie awaria całego automatu — strona pokaże baner.
+      if (err.code !== 'invalid_grant') failures.push(`konto ${slot}: ${err.message}`);
+    }
+  }
+  if (!connected) console.log('Jeszcze nikt nie jest połączony — instrukcja na stronie spotify.html. Pomijam.');
+  await writeIndex(root);
+  if (failures.length) throw new Error(failures.join('; '));
+}
+
+export async function disconnectSlot(root, env = process.env) {
+  const slot = parseSlot(env);
+  await migrateLegacy(root);
+  await rm(slotDir(root, slot), { recursive: true, force: true });
+  await writeIndex(root);
+  console.log(`Konto nr ${slot} odłączone, jego dane usunięte.`);
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   const [mode, dir = 'dane'] = process.argv.slice(2);
-  const run = mode === 'connect' ? connect : mode === 'sync' ? sync : null;
+  const run = { connect: connectSlot, sync: syncAll, disconnect: disconnectSlot }[mode];
   if (!run) {
-    console.error('Użycie: node scripts/spotify-sync.mjs connect|sync <katalog>');
+    console.error('Użycie: node scripts/spotify-sync.mjs connect|sync|disconnect <katalog>');
     process.exit(2);
   }
   run(dir).catch((err) => {

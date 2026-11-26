@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { encryptToken, decryptToken, itemToRow, mergeRows, redirectUri, connect, sync } from './spotify-sync.mjs';
+import { encryptToken, decryptToken, itemToRow, mergeRows, redirectUri, connect, sync, migrateLegacy, syncAll, connectSlot, disconnectSlot } from './spotify-sync.mjs';
+import { stat } from 'node:fs/promises';
 
 const item = (playedAt, name, artist = 'Artist') => ({
   played_at: playedAt,
@@ -116,4 +117,58 @@ test('brak sekretów daje czytelny błąd', async () => {
   await writeFile(join(dir, 'token.json'), JSON.stringify(encryptToken('stary', 'sekret')));
   await assert.rejects(() => sync(dir, { GITHUB_REPOSITORY: 'a/b' }), /SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET/);
   await assert.rejects(() => connect(dir, { GITHUB_REPOSITORY: 'a/b' }), /SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_CODE/);
+});
+
+const exists = (p) => stat(p).then(() => true, () => false);
+
+test('migracja: dotychczasowe dane z katalogu głównego trafiają do konta nr 1', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ss-'));
+  await writeFile(join(root, 'token.json'), JSON.stringify(encryptToken('t', 'sekret')));
+  await writeFile(join(root, 'status.json'), JSON.stringify({ connectedAt: '2026-11-26T18:30:00Z', files: ['odsluchy/2026.json'] }));
+  await mkdir(join(root, 'odsluchy'));
+  await writeFile(join(root, 'odsluchy/2026.json'), '[]');
+  assert.equal(await migrateLegacy(root), true);
+  assert.ok(await exists(join(root, 'konta/1/token.json')));
+  assert.ok(await exists(join(root, 'konta/1/odsluchy/2026.json')));
+  assert.equal(await exists(join(root, 'token.json')), false);
+  assert.equal(await migrateLegacy(root), false);
+});
+
+test('syncAll: każde konto osobno, wygasłe logowanie nie wywala całości, konta.json ma 5 miejsc', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ss-'));
+  for (const [slot, tok] of [[1, 'dobry'], [3, 'zly']]) {
+    await mkdir(join(root, `konta/${slot}`), { recursive: true });
+    await writeFile(join(root, `konta/${slot}/token.json`), JSON.stringify(encryptToken(tok, 'sekret')));
+    await writeFile(join(root, `konta/${slot}/status.json`), JSON.stringify({ connectedAt: '2026-11-26T00:00:00Z', name: `Osoba ${slot}` }));
+  }
+  mockFetch((url, opts) => {
+    if (url.includes('/api/token')) return opts.body.toString().includes('zly')
+      ? { status: 400, body: { error: 'invalid_grant' } }
+      : { body: { access_token: 'acc' } };
+    return { body: { items: [item('2026-11-26T10:00:00Z', 'X')] } };
+  });
+  await syncAll(root, env);
+  const idx = JSON.parse(await readFile(join(root, 'konta.json'), 'utf8'));
+  assert.equal(idx.slots.length, 5);
+  assert.deepEqual(idx.slots.map((s) => s.name), ['Osoba 1', null, 'Osoba 3', null, null]);
+  assert.deepEqual(idx.slots[0].files, ['odsluchy/2026.json']);
+  assert.equal(idx.slots[2].error, 'invalid_grant');
+});
+
+test('connectSlot zapisuje nazwę i konto; disconnectSlot usuwa', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ss-'));
+  mockFetch((url) => url.includes('/api/token') ? { body: { access_token: 'a', refresh_token: 'r' } }
+    : url.endsWith('/v1/me') ? { body: { display_name: 'kasia_123' } }
+    : { body: { items: [] } });
+  await connectSlot(root, { ...env, SPOTIFY_CODE: 'k', SPOTIFY_SLOT: '2' });
+  let idx = JSON.parse(await readFile(join(root, 'konta.json'), 'utf8'));
+  assert.equal(idx.slots[1].name, 'kasia_123');
+  await connectSlot(root, { ...env, SPOTIFY_CODE: 'k', SPOTIFY_SLOT: '4', SPOTIFY_NAME: ' Tomek ' });
+  idx = JSON.parse(await readFile(join(root, 'konta.json'), 'utf8'));
+  assert.equal(idx.slots[3].name, 'Tomek');
+  await disconnectSlot(root, { ...env, SPOTIFY_SLOT: '2' });
+  idx = JSON.parse(await readFile(join(root, 'konta.json'), 'utf8'));
+  assert.equal(idx.slots[1].name, null);
+  assert.equal(await exists(join(root, 'konta/2')), false);
+  await assert.rejects(() => connectSlot(root, { ...env, SPOTIFY_CODE: 'k', SPOTIFY_SLOT: '6' }), /od 1 do 5/);
 });
