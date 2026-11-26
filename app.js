@@ -44,6 +44,7 @@
     artist: '',
     artistSpan: 'all',
     artistUnit: null,
+    showMore: false, // topki: 10 pozycji albo 25
     kingsUnit: null, // null = automatycznie (tygodnie do roku, dłużej miesiące)
     slot: 1,
     accounts: null, // z konta.json (null = jeszcze nie wczytane / brak sieci)
@@ -345,13 +346,33 @@
 
   const valueOf = (it) => (state.sortBy === 'plays' ? `${nf.format(it.plays)} odtw.` : `${nf.format(minutes(it.ms))} min`);
 
+  /** Pozycje z poprzedniego, równie długiego okresu (do strzałek ▲▼). Dla „cały czas” brak porównania. */
+  function previousRanks(kind) {
+    if (state.range === 'all') return null;
+    const { from, to } = currentBounds();
+    const prev = A.sliceRange(state.rows, from - (to - from), from);
+    if (!prev.length) return null;
+    const map = new Map();
+    A.top(prev, kind, { sortBy: state.sortBy, limit: 0 }).forEach((it, i) => map.set(it.key, i + 1));
+    return map;
+  }
+  /** Zmiana pozycji względem poprzedniego okresu: ▲2, ▼1, „nowy”. */
+  function delta(prev, it, i) {
+    if (!prev) return '';
+    const before = prev.get(it.key);
+    if (before == null) return '<span class="delta delta--new" title="Nie było w poprzednim okresie">nowy</span>';
+    const d = before - (i + 1);
+    if (!d) return '<span class="delta delta--same" title="Bez zmian">–</span>';
+    return `<span class="delta ${d > 0 ? 'delta--up' : 'delta--down'}" title="Poprzednio miejsce ${before}">${d > 0 ? '▲' : '▼'}${Math.abs(d)}</span>`;
+  }
+
   /** Lista w stylu tracklisty: numer, okładka, tytuł + wykonawca, wartość. */
-  function trackList(items, kind) {
+  function trackList(items, kind, prev) {
     if (!items.length) return '<p class="no-data">Brak odsłuchów w tym zakresie.</p>';
     return `<ol class="tracklist">${items.map((it, i) => {
       const other = state.sortBy === 'plays' ? `${nf.format(minutes(it.ms))} min` : `${nf.format(it.plays)} odtw.`;
       return `<li class="track-row" data-artist="${esc(it.artist)}" tabindex="0" role="button" title="Pokaż wykres: ${esc(it.artist)}">
-        <span class="track-rank">${i + 1}</span>
+        <span class="track-rank">${i + 1}${delta(prev, it, i)}</span>
         ${coverAvatar(kind === 'album' ? it.name : `${it.name} ${it.artist}`, it.artist, kind === 'album' ? it.name : it.album, 'avatar--cover')}
         <span class="track-text"><span class="track-name">${esc(it.name)}</span><span class="track-sub">${esc(it.artist)}</span></span>
         <span class="track-val" title="${other}">${valueOf(it)}</span>
@@ -359,20 +380,27 @@
     }).join('')}</ol>`;
   }
 
-  function artistGrid(items) {
+  function artistGrid(items, prev) {
     if (!items.length) return '<p class="no-data">Brak odsłuchów w tym zakresie.</p>';
     return items.map((it, i) => `<button type="button" class="artist-card" data-artist="${esc(it.name)}" title="Pokaż wykres: ${esc(it.name)}">
         ${artistAvatar(it.name, 'avatar--lg')}
         <span class="artist-card__name"><span class="artist-card__rank">${i + 1}.</span> ${esc(it.name)}</span>
-        <span class="artist-card__sub">${valueOf(it)}</span>
+        <span class="artist-card__sub">${valueOf(it)} ${delta(prev, it, i)}</span>
       </button>`).join('');
   }
 
   function renderTops(slice) {
-    const opts = { sortBy: state.sortBy, limit: 10 };
-    document.getElementById('top-artists').innerHTML = artistGrid(A.top(slice, 'artist', opts));
-    document.getElementById('top-tracks').innerHTML = trackList(A.top(slice, 'track', opts), 'track');
-    document.getElementById('top-albums').innerHTML = trackList(A.top(slice, 'album', opts), 'album');
+    const limit = state.showMore ? 25 : 10;
+    const opts = { sortBy: state.sortBy, limit };
+    const more = (n) => (n > 10 ? `<button type="button" class="more-btn" data-more>${state.showMore ? 'Pokaż mniej' : 'Pokaż więcej'}</button>` : '');
+    const artists = A.top(slice, 'artist', opts);
+    const tracks = A.top(slice, 'track', opts);
+    const albums = A.top(slice, 'album', opts);
+    const total = (kind) => A.top(slice, kind, { sortBy: state.sortBy, limit: 0 }).length;
+    document.getElementById('top-artists').innerHTML = artistGrid(artists, previousRanks('artist'));
+    document.getElementById('top-artists-more').innerHTML = more(total('artist'));
+    document.getElementById('top-tracks').innerHTML = trackList(tracks, 'track', previousRanks('track')) + more(total('track'));
+    document.getElementById('top-albums').innerHTML = trackList(albums, 'album', previousRanks('album')) + more(total('album'));
   }
 
   // ─────────────────────────────────────────────────────── NR 1 TYGODNIA
@@ -648,6 +676,13 @@
       el.addEventListener('click', onArtistPick);
       el.addEventListener('keydown', (e) => { if (e.key === 'Enter') onArtistPick(e); });
     }
+
+    document.getElementById('state-data').addEventListener('click', (e) => {
+      if (!e.target.closest('[data-more]')) return;
+      state.showMore = !state.showMore;
+      const { from, to } = currentBounds();
+      renderTops(A.sliceRange(state.rows, from, to));
+    });
 
     document.getElementById('kings-unit').addEventListener('click', (e) => {
       const b = e.target.closest('button');
