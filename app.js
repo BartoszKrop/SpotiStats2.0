@@ -316,6 +316,7 @@
     renderKpis(sum);
     renderTops(slice);
     renderKings(slice, from, to);
+    renderWhen(slice);
     renderTopChart(slice, from, to);
     renderArtist(from, to);
   }
@@ -401,6 +402,26 @@
     document.getElementById('top-artists-more').innerHTML = more(total('artist'));
     document.getElementById('top-tracks').innerHTML = trackList(tracks, 'track', previousRanks('track')) + more(total('track'));
     document.getElementById('top-albums').innerHTML = trackList(albums, 'album', previousRanks('album')) + more(total('album'));
+  }
+
+  // ─────────────────────────────────────────────────────── KIEDY SŁUCHASZ
+  const DAY_NAMES = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'];
+  const DAY_FULL = ['w poniedziałki', 'we wtorki', 'w środy', 'w czwartki', 'w piątki', 'w soboty', 'w niedziele'];
+  function bars(values, labels, peak, labelEvery = 1, fmt) {
+    const max = Math.max(1, ...values);
+    return values.map((v, i) => `<div class="bar${i === peak ? ' is-peak' : ''}" title="${esc(fmt(i, v))}">
+      <span class="bar__fill" style="height:${Math.max(v ? 3 : 0, (v / max) * 100)}%"></span>
+      <span class="bar__label">${i % labelEvery === 0 ? labels[i] : ''}</span></div>`).join('');
+  }
+  function renderWhen(slice) {
+    const r = A.listeningHours(slice);
+    const hourLabels = Array.from({ length: 24 }, (_, h) => String(h));
+    const hh = (h) => `${String(h).padStart(2, '0')}:00–${String((h + 1) % 24).padStart(2, '0')}:00`;
+    document.getElementById('when-hours').innerHTML = bars(r.hours, hourLabels, r.peakHour, 3, (i, v) => `${hh(i)} · ${nf.format(minutes(v))} min`);
+    document.getElementById('when-days').innerHTML = bars(r.days, DAY_NAMES, r.peakDay, 1, (i, v) => `${DAY_NAMES[i]} · ${nf.format(minutes(v))} min`);
+    document.getElementById('when-summary').textContent = r.total
+      ? `Najwięcej słuchasz koło ${String(r.peakHour).padStart(2, '0')}:00, ${DAY_FULL[r.peakDay]}`
+      : '';
   }
 
   // ─────────────────────────────────────────────────────── NR 1 TYGODNIA

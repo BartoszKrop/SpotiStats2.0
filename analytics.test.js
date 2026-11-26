@@ -160,3 +160,17 @@ test('rankTimeline: kto był nr 1 w każdym tygodniu', () => {
   const o = Object.fromEntries(out.series.map((s) => [s.key, s.values]));
   assert.deepEqual(o.A, [1, 2, 3, null]); // 3 = „poza top 2”, null = tydzień bez odsłuchów
 });
+
+test('listeningHours: godziny i dni tygodnia w czasie lokalnym', () => {
+  const t = (d, h) => new Date(2026, 0, d, h, 30).getTime(); // 5 sty 2026 = poniedziałek
+  const r = A.listeningHours([
+    { t: t(5, 8), ms: 60000 }, { t: t(5, 8), ms: 60000 }, { t: t(11, 23), ms: 30000 } // niedziela 23:30
+  ]);
+  assert.equal(r.hours[8], 120000);
+  assert.equal(r.hours[23], 30000);
+  assert.equal(r.days[0], 120000);
+  assert.equal(r.days[6], 30000);
+  assert.equal(r.peakHour, 8);
+  assert.equal(r.peakDay, 0);
+  assert.equal(A.listeningHours([]).peakHour, null);
+});
