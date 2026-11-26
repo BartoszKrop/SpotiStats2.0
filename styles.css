@@ -307,7 +307,15 @@ button { font: inherit; color: inherit; }
   .chip { flex-shrink: 0; }
   .kings { grid-template-columns: minmax(0, 1fr); }
   .two-col { grid-template-columns: minmax(0, 1fr); }
-  .artist-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  .artist-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.25rem; }
+  .artist-card { padding: 0.5rem; }
+  .artist-card .avatar { font-size: 1.5rem; margin-bottom: 0.2rem; }
+  .artist-card__name { font-size: 0.85rem; }
+  .artist-card__sub { font-size: 0.75rem; }
+  .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .account.is-empty { width: 56px; }
+  .account.is-empty .account-text { display: none; }
   .card { padding: 1rem; }
   .field-input { min-width: 0; width: 100%; }
   .card-controls { width: 100%; }
