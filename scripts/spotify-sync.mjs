@@ -192,7 +192,7 @@ export async function sync(dir, env = process.env, accessToken = null) {
     });
     await writeJson(statusPath, status);
     console.log(`Pobrano ${items.length} ostatnich utworów, nowych: ${added}.`);
-    return { added, accessToken };
+    return { added, accessToken, items };
   } catch (err) {
     // Błąd zapisujemy, żeby strona mogła go pokazać (np. wygasłe logowanie po 6 miesiącach).
     Object.assign(status, {
@@ -207,7 +207,7 @@ export async function sync(dir, env = process.env, accessToken = null) {
 // ─────────────────────────────────────────────── zdjęcia wykonawców
 
 /** Najmniejsze zdjęcie, które ma co najmniej `min` px (Spotify zwraca je od największego). */
-export function pickImage(images, min = 160) {
+export function pickImage(images, min = 320) {
   const list = (images || []).filter((i) => i && i.url);
   if (!list.length) return null;
   const ok = list.filter((i) => !i.width || i.width >= min);
@@ -223,7 +223,7 @@ export async function updateArtistImages(root, accessToken, names, { max = IMAGE
   const known = await readJson(path, {});
   const retryBefore = now - IMAGE_RETRY_DAYS * 86_400_000;
   const todo = [...new Set(names.filter(Boolean))]
-    .filter((n) => { const e = known[n.toLowerCase()]; return !e || (!e.img && Date.parse(e.at || 0) < retryBefore); })
+    .filter((n) => { const e = known[n.toLowerCase()]; return !e || (!e.img && Date.parse(e.at || 0) < retryBefore) || (e.img && !e.hq); })
     .slice(0, max);
   let found = 0;
   for (const name of todo) {
@@ -233,15 +233,57 @@ export async function updateArtistImages(root, accessToken, names, { max = IMAGE
     if (!res.ok) throw new Error(`Spotify search: ${res.status}`);
     const items = (await res.json())?.artists?.items || [];
     const hit = items.find((a) => a && String(a.name).toLowerCase() === name.toLowerCase());
-    const img = hit ? pickImage(hit.images) : null;
+    const img = hit ? pickImage(hit.images, 300) : null;
     if (img) found++;
-    known[name.toLowerCase()] = { name, img, at: new Date(now).toISOString() };
+    known[name.toLowerCase()] = { name, img, hq: true, at: new Date(now).toISOString() };
   }
   if (todo.length) {
     await writeJson(path, known);
     console.log(`Zdjęcia wykonawców: sprawdzono ${todo.length}, znaleziono ${found}.`);
   }
   return { checked: todo.length, found };
+}
+
+/**
+ * Dokładne zdjęcia z świeżo pobranych odsłuchów: okładki albumów prosto z utworów oraz zdjęcia wykonawców
+ * po ich identyfikatorach (bez zgadywania po nazwie — nie pomyli tezek ani imienników).
+ */
+export async function recordFreshImages(root, accessToken, items, { now = Date.now() } = {}) {
+  const at = new Date(now).toISOString();
+  const covers = await readJson(join(root, 'okladki.json'), {});
+  const artists = await readJson(join(root, 'wykonawcy.json'), {});
+  const ids = new Map(); // id -> nazwa
+  let newCovers = 0;
+  for (const it of items) {
+    const t = it.track || {};
+    const artist = t.artists?.[0];
+    if (!artist) continue;
+    if (artist.id && artist.name) ids.set(artist.id, artist.name);
+    const img = t.album?.images?.length ? pickImage(t.album.images, 100) : null;
+    if (img && t.album?.name) {
+      const key = coverKey(artist.name, t.album.name);
+      if (covers[key]?.img !== img) newCovers++;
+      covers[key] = { img, at, exact: true };
+    }
+  }
+  const need = [...ids.keys()].filter((id) => { const e = artists[ids.get(id).toLowerCase()]; return !e || !e.exact || !e.img; }).slice(0, 50);
+  let newArtists = 0;
+  if (need.length) {
+    const res = await fetch(`https://api.spotify.com/v1/artists?ids=${need.join(',')}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (res.ok) {
+      for (const a of (await res.json())?.artists || []) {
+        if (!a) continue;
+        const img = pickImage(a.images, 300);
+        if (!img) continue;
+        artists[String(a.name).toLowerCase()] = { name: a.name, img, hq: true, exact: true, at };
+        newArtists++;
+      }
+    }
+  }
+  if (newCovers) await writeJson(join(root, 'okladki.json'), covers);
+  if (newArtists) await writeJson(join(root, 'wykonawcy.json'), artists);
+  if (newCovers || newArtists) console.log(`Dokładne obrazy z odsłuchów: okładki ${newCovers}, wykonawcy ${newArtists}.`);
+  return { newCovers, newArtists };
 }
 
 export const coverKey = (artist, album) => `${String(artist).toLowerCase()}|${String(album).toLowerCase()}`;
@@ -358,8 +400,9 @@ export async function syncAll(root, env = process.env) {
     if (!(await exists(join(dir, 'token.json')))) continue;
     connected++;
     try {
-      const { accessToken } = await sync(dir, env);
+      const { accessToken, items = [] } = await sync(dir, env);
       try {
+        await recordFreshImages(root, accessToken, items);
         const heard = await listened(dir);
         await updateArtistImages(root, accessToken, heard.artists);
         await updateAlbumCovers(root, accessToken, heard.albums);

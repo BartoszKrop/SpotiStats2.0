@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { encryptToken, decryptToken, itemToRow, mergeRows, redirectUri, connect, sync, migrateLegacy, syncAll, connectSlot, disconnectSlot, pickImage, updateArtistImages, updateAlbumCovers, coverKey } from './spotify-sync.mjs';
+import { encryptToken, decryptToken, itemToRow, mergeRows, redirectUri, connect, sync, migrateLegacy, syncAll, connectSlot, disconnectSlot, pickImage, updateArtistImages, updateAlbumCovers, coverKey, recordFreshImages } from './spotify-sync.mjs';
 import { stat } from 'node:fs/promises';
 
 const item = (playedAt, name, artist = 'Artist') => ({
@@ -173,8 +173,9 @@ test('connectSlot zapisuje nazwę i konto; disconnectSlot usuwa', async () => {
   await assert.rejects(() => connectSlot(root, { ...env, SPOTIFY_CODE: 'k', SPOTIFY_SLOT: '6' }), /od 1 do 5/);
 });
 
-test('pickImage wybiera najmniejsze zdjęcie ≥160 px', () => {
-  assert.equal(pickImage([{ url: 'big', width: 640 }, { url: 'mid', width: 320 }, { url: 'small', width: 64 }]), 'mid');
+test('pickImage wybiera najmniejsze zdjęcie ≥320 px (ostre na ekranach retina)', () => {
+  assert.equal(pickImage([{ url: 'big', width: 640 }, { url: 'mid', width: 320 }, { url: 'small', width: 160 }]), 'mid');
+  assert.equal(pickImage([{ url: 'big', width: 640 }, { url: 'small', width: 160 }, { url: 'tiny', width: 64 }]), 'big');
   assert.equal(pickImage([{ url: 'tiny', width: 64 }]), 'tiny');
   assert.equal(pickImage([]), null);
 });
@@ -206,4 +207,21 @@ test('updateAlbumCovers: dokładna nazwa albumu, brak zapamiętany, bez powtóre
   assert.equal(known[coverKey('Ala', 'Dobry Album')].img, 'https://i/cover');
   assert.equal(known[coverKey('Ola', 'Brak')].img, null);
   assert.equal((await updateAlbumCovers(root, 'acc', pairs)).checked, 0);
+});
+
+test('recordFreshImages: okładki z utworów i zdjęcia wykonawców po id (dokładnie)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ss-'));
+  const items = [{
+    played_at: '2026-11-26T10:00:00Z',
+    track: { name: 'S', artists: [{ id: 'id1', name: 'Eden' }], album: { name: 'LP', images: [{ url: 'https://i/c640', width: 640 }, { url: 'https://i/c300', width: 300 }, { url: 'https://i/c64', width: 64 }] } }
+  }];
+  const calls = mockFetch((url) => ({ body: { artists: [{ id: 'id1', name: 'Eden', images: [{ url: 'https://i/a640', width: 640 }, { url: 'https://i/a320', width: 320 }, { url: 'https://i/a160', width: 160 }] }] } }));
+  const r = await recordFreshImages(root, 'acc', items);
+  assert.deepEqual(r, { newCovers: 1, newArtists: 1 });
+  assert.match(calls[0].url, /\/v1\/artists\?ids=id1$/);
+  const covers = JSON.parse(await readFile(join(root, 'okladki.json'), 'utf8'));
+  assert.equal(covers[coverKey('Eden', 'LP')].img, 'https://i/c300');
+  const art = JSON.parse(await readFile(join(root, 'wykonawcy.json'), 'utf8'));
+  assert.equal(art.eden.img, 'https://i/a320');
+  assert.equal((await recordFreshImages(root, 'acc', items)).newArtists, 0); // już dokładne — bez ponownego pytania
 });
