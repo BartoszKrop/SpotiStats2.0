@@ -404,7 +404,25 @@
     return { totalWeeks: starts.length, leaders, longest: best, peaks: peaks.slice(0, limit) };
   }
 
+  /**
+   * Łączy dwa zbiory odsłuchów (np. stary eksport + nowszy) bez duplikatów.
+   * Odsłuch to ten sam, gdy zgadza się czas, wykonawca, utwór i czas odtwarzania.
+   */
+  function mergeRows(oldRows, newRows) {
+    const key = (r) => `${r.t}|${r.artist}|${r.track}|${r.ms}`;
+    const seen = new Set(oldRows.map(key));
+    const out = oldRows.slice();
+    for (const r of newRows) {
+      const k = key(r);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(r);
+    }
+    return out.sort((a, b) => a.t - b.t);
+  }
+
   const API = {
+    mergeRows,
     records,
     listeningHours,
     rankTimeline,
