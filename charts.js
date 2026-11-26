@@ -75,12 +75,13 @@
     }
 
     const width = Math.max(container.clientWidth || 600, 280);
-    const pad = { top: 12, right: 12, bottom: 28, left: 52 };
+    const rank = Boolean(opts.rank); // tryb rankingu: 1 na górze, null = poza topką
+    const pad = { top: 12, right: 12, bottom: 28, left: rank ? 36 : 52 };
     const w = width - pad.left - pad.right;
     const h = height - pad.top - pad.bottom;
 
     let maxV = 0;
-    for (const s of series) for (const v of s.values) if (v > maxV) maxV = v;
+    for (const s of series) for (const v of s.values) if (v != null && v > maxV) maxV = v;
     // Oś Y w minutach albo godzinach — zależnie od skali.
     const useHours = maxV >= 180;
     const scaleMax = useHours ? maxV / 60 : maxV;
@@ -90,14 +91,24 @@
 
     const n = buckets.length;
     const x = (i) => pad.left + (n === 1 ? w / 2 : (i / (n - 1)) * w);
-    const y = (v) => pad.top + h - (v / yMax) * h;
+    const maxRank = opts.maxRank || 10;
+    const y = rank
+      ? (v) => pad.top + ((v - 1) / Math.max(1, maxRank - 1)) * h
+      : (v) => pad.top + h - (v / yMax) * h;
 
     const svg = el('svg', { viewBox: `0 0 ${width} ${height}`, width, height, role: 'img', class: 'chart-svg' });
     svg.setAttribute('aria-label', `Wykres liniowy: ${series.map((s) => s.name).join(', ')}`);
 
     // Siatka + oś Y
     const grid = el('g', { class: 'chart-grid' }, svg);
-    for (let v = 0; v <= top + 1e-9; v += step) {
+    if (rank) {
+      for (let r = 1; r <= maxRank; r++) {
+        el('line', { x1: pad.left, x2: pad.left + w, y1: y(r), y2: y(r), class: r === 1 ? 'chart-baseline' : '' }, grid);
+        const t = el('text', { x: pad.left - 8, y: y(r) + 4, 'text-anchor': 'end', class: 'chart-tick' }, grid);
+        t.textContent = `#${r}`;
+      }
+    }
+    for (let v = 0; !rank && v <= top + 1e-9; v += step) {
       const yy = y(useHours ? v * 60 : v);
       el('line', { x1: pad.left, x2: pad.left + w, y1: yy, y2: yy, class: v === 0 ? 'chart-baseline' : '' }, grid);
       const t = el('text', { x: pad.left - 8, y: yy + 4, 'text-anchor': 'end', class: 'chart-tick' }, grid);
@@ -117,7 +128,18 @@
     // Linie
     const lines = el('g', { class: 'chart-lines' }, svg);
     for (const s of series) {
-      const d = s.values.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
+      // null przerywa linię (np. wykonawca wypadł z top 10 w danym tygodniu)
+      let d = '';
+      let pen = false;
+      s.values.forEach((v, i) => {
+        if (v == null) { pen = false; return; }
+        d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
+        pen = true;
+      });
+      if (rank && n <= 80) {
+        // Pojedyncze tygodnie bez sąsiadów byłyby niewidoczne — kropki dla każdego punktu.
+        s.values.forEach((v, i) => { if (v != null) el('circle', { cx: x(i), cy: y(v), r: v === 1 ? 3.5 : 2.5, fill: s.color }, lines); });
+      }
       if (opts.area && series.length === 1) {
         el('path', { d: `${d}L${x(n - 1).toFixed(1)},${y(0)}L${x(0).toFixed(1)},${y(0)}Z`, fill: s.color, 'fill-opacity': 0.14, stroke: 'none' }, lines);
       }
@@ -141,15 +163,20 @@
       vline.setAttribute('x1', x(i));
       vline.setAttribute('x2', x(i));
       series.forEach((s, k) => {
+        const v = s.values[i];
+        dots[k].setAttribute('visibility', v == null ? 'hidden' : 'visible');
+        if (v == null) return;
         dots[k].setAttribute('cx', x(i));
-        dots[k].setAttribute('cy', y(s.values[i]));
+        dots[k].setAttribute('cy', y(v));
       });
       const rows = series
         .map((s) => ({ s, v: s.values[i] }))
-        .sort((a, b) => b.v - a.v)
-        .map(({ s, v }) => `<div class="chart-tip__row"><span class="swatch" style="background:${s.color}"></span><span class="chart-tip__name">${esc(s.name)}</span><span class="chart-tip__val">${fmtMinutes(v)}</span></div>`)
+        .filter(({ v }) => !rank || v != null)
+        .sort((a, b) => (rank ? a.v - b.v : b.v - a.v))
+        .map(({ s, v }) => `<div class="chart-tip__row"><span class="swatch" style="background:${s.color}"></span><span class="chart-tip__name">${esc(s.name)}</span><span class="chart-tip__val">${rank ? `#${v}` : fmtMinutes(v)}</span></div>`)
         .join('');
-      tip.innerHTML = `<div class="chart-tip__title">${bucketTitle(buckets[i], unit)}</div>${rows}`;
+      const extra = opts.tipExtra ? opts.tipExtra(i) : '';
+      tip.innerHTML = `<div class="chart-tip__title">${bucketTitle(buckets[i], unit)}</div>${extra}${rows || '<div class="chart-tip__row">—</div>'}`;
       tip.classList.remove('hidden');
       const tipW = tip.offsetWidth;
       let left = x(i) + 14;
@@ -172,5 +199,5 @@
     hit.addEventListener('pointerleave', hide);
   }
 
-  root.SpotiCharts = { lineChart, fmtMinutes, bucketTitle };
+  root.SpotiCharts = { lineChart, fmtMinutes, bucketTitle, esc };
 })(globalThis);

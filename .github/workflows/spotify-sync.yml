@@ -7,9 +7,22 @@ on:
   workflow_dispatch:
     inputs:
       code:
-        description: 'Kod ze strony spotify.html (tylko przy pierwszym połączeniu albo po wygaśnięciu logowania). Puste = zwykła synchronizacja.'
+        description: 'Kod ze strony spotify.html (przy podłączaniu konta albo po wygaśnięciu logowania). Puste = zwykła synchronizacja.'
         required: false
         default: ''
+      konto:
+        description: 'Które konto (1 = Ty, 2–5 = znajomi)'
+        type: choice
+        options: ['1', '2', '3', '4', '5']
+        default: '1'
+      nazwa:
+        description: 'Nazwa konta na stronie (opcjonalnie, np. imię znajomego)'
+        required: false
+        default: ''
+      odlacz:
+        description: 'Odłącz to konto i usuń jego dane'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -40,16 +53,24 @@ jobs:
         with:
           node-version: 22
 
+      - name: Odłącz konto
+        if: ${{ inputs.odlacz == true }}
+        env:
+          SPOTIFY_SLOT: ${{ inputs.konto }}
+        run: node app/scripts/spotify-sync.mjs disconnect dane
+
       - name: Połącz ze Spotify
-        if: ${{ inputs.code != '' && inputs.code != null }}
+        if: ${{ inputs.odlacz != true && inputs.code != '' && inputs.code != null }}
         env:
           SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
           SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
           SPOTIFY_CODE: ${{ inputs.code }}
+          SPOTIFY_SLOT: ${{ inputs.konto }}
+          SPOTIFY_NAME: ${{ inputs.nazwa }}
         run: node app/scripts/spotify-sync.mjs connect dane
 
       - name: Dociągnij ostatnie odsłuchy
-        if: ${{ inputs.code == '' || inputs.code == null }}
+        if: ${{ inputs.odlacz != true && (inputs.code == '' || inputs.code == null) }}
         env:
           SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
           SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}

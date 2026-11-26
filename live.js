@@ -1,13 +1,16 @@
 /*
  * SpotiStats — odczyt automatycznie dociąganych odsłuchów z gałęzi „dane”
  * (zapisuje je workflow .github/workflows/spotify-sync.yml).
- * window.SpotiLive = { repo, rawUrl, actionsUrl, loadStatus, loadRows, tokenAgeDays }
+ * Do 5 kont: konta.json + konta/<n>/odsluchy/<rok>.json.
  */
 (function (root) {
   'use strict';
 
   const DEFAULT_REPO = 'BartoszKrop/SpotiStats2.0';
+  /** Client ID aplikacji Spotify — to publiczny identyfikator (widać go w każdym linku logowania), nie sekret. */
+  const CLIENT_ID = '07ef9b62455442ad8f53cb2b1b348b60';
   const BRANCH = 'dane';
+  const SLOTS = 5;
   /** Spotify unieważnia logowanie aplikacji po 6 miesiącach. */
   const TOKEN_LIFETIME_DAYS = 182;
 
@@ -17,7 +20,6 @@
     const seg = location.pathname.split('/').filter(Boolean)[0];
     if (m && seg && !/\.html$/i.test(seg)) {
       const [defOwner, defRepo] = DEFAULT_REPO.split('/');
-      // Zachowaj oryginalną wielkość liter, jeśli to ten sam projekt.
       if (m[1].toLowerCase() === defOwner.toLowerCase() && seg.toLowerCase() === defRepo.toLowerCase()) return DEFAULT_REPO;
       return `${m[1]}/${seg}`;
     }
@@ -35,22 +37,34 @@
     return res.json();
   }
 
-  /** null = automat jeszcze nie skonfigurowany (brak gałęzi/pliku). */
-  function loadStatus() {
-    return getJson('status.json');
+  const emptySlots = () => Array.from({ length: SLOTS }, (_, i) => ({ slot: i + 1, name: null }));
+
+  /**
+   * Lista 5 miejsc: [{ slot, name, connectedAt, lastSync, error, files, base }].
+   * Zgodność wstecz: przed podziałem na konta dane leżały w katalogu głównym gałęzi — to konto nr 1.
+   */
+  async function loadAccounts() {
+    const index = await getJson('konta.json');
+    if (index && Array.isArray(index.slots)) {
+      return emptySlots().map((e) => ({ ...e, ...(index.slots.find((s) => s.slot === e.slot) || {}), base: `konta/${e.slot}/` }));
+    }
+    const legacy = await getJson('status.json');
+    const slots = emptySlots().map((e) => ({ ...e, base: `konta/${e.slot}/` }));
+    if (legacy && legacy.connectedAt) slots[0] = { ...slots[0], ...legacy, name: legacy.name || null, base: '' };
+    return slots;
   }
 
-  /** Surowe wiersze (format rozszerzonego eksportu) ze wszystkich plików z odsłuchami. */
-  async function loadRows(status) {
-    const files = (status && status.files) || [];
-    const parts = await Promise.all(files.map((f) => getJson(f).catch(() => null)));
+  /** Surowe wiersze (format rozszerzonego eksportu) jednego konta. */
+  async function loadRows(account) {
+    const files = (account && account.files) || [];
+    const parts = await Promise.all(files.map((f) => getJson(account.base + f).catch(() => null)));
     return parts.filter(Array.isArray).flat();
   }
 
-  function tokenAgeDays(status) {
-    if (!status || !status.connectedAt) return null;
-    return (Date.now() - Date.parse(status.connectedAt)) / 86_400_000;
+  function tokenAgeDays(account) {
+    if (!account || !account.connectedAt) return null;
+    return (Date.now() - Date.parse(account.connectedAt)) / 86_400_000;
   }
 
-  root.SpotiLive = { repo, rawUrl, actionsUrl, loadStatus, loadRows, tokenAgeDays, TOKEN_LIFETIME_DAYS };
+  root.SpotiLive = { CLIENT_ID, SLOTS, repo, rawUrl, actionsUrl, loadAccounts, loadRows, tokenAgeDays, TOKEN_LIFETIME_DAYS };
 })(globalThis);

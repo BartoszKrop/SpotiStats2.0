@@ -4,88 +4,124 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="no-referrer" />
+    <meta name="theme-color" content="#121212" />
     <title>Połączenie ze Spotify</title>
-    <link rel="stylesheet" href="./styles.css?v=4" />
+    <link rel="stylesheet" href="./styles.css?v=5" />
   </head>
   <body>
     <nav class="topbar">
-      <a class="topbar-brand" href="./" style="color:inherit;text-decoration:none">
-        <span class="logo-icon" aria-hidden="true">◎</span>
+      <a class="topbar-brand" href="./">
+        <span class="logo-icon" aria-hidden="true">◉</span>
         <span class="logo-text">SpotiStats</span>
       </a>
-      <a class="btn btn--ghost btn--sm" href="./">← Wróć do statystyk</a>
+      <a class="btn btn--ghost btn--sm" href="./">← Statystyki</a>
     </nav>
 
     <main class="setup">
-      <h1 class="setup-title">Automatyczne dociąganie odsłuchów</h1>
-      <p class="setup-lead">Co godzinę GitHub Actions pyta Spotify o ostatnie 50 utworów i dopisuje nowe do gałęzi <code>dane</code>. Strona łączy je z Twoim eksportem.</p>
+      <h1 class="setup-title" id="title">Automatyczne dociąganie odsłuchów</h1>
+      <p class="setup-lead" id="lead">Co godzinę GitHub Actions pyta Spotify o ostatnie 50 utworów każdego podłączonego konta i dopisuje nowe do gałęzi <code>dane</code>. Strona łączy je z eksportem.</p>
 
-      <section class="card" id="status-card">
-        <h2 class="card-title">Stan</h2>
-        <p id="status-text" class="setup-status">Sprawdzam…</p>
+      <!-- Znajomy: tylko logowanie -->
+      <section class="card hidden" id="friend-card">
+        <h2 class="card-title">Połącz swoje konto Spotify</h2>
+        <p class="setup-lead">Zaloguj się, a potem wyślij kod osobie, która dała Ci ten link. Spotify pozwoli na to tylko wtedy, gdy ta osoba dopisała już Twój e-mail w swojej aplikacji.</p>
+        <p style="margin-top:1rem"><button class="btn btn--primary" type="button" id="friend-login">Zaloguj przez Spotify</button></p>
       </section>
 
-      <section class="card" id="code-card" hidden>
-        <h2 class="card-title">Krok 4 — przekaż kod do GitHuba (masz 10 minut)</h2>
-        <p>Zalogowano. Skopiuj kod:</p>
+      <section class="card hidden" id="code-card">
+        <h2 class="card-title" id="code-title">Przekaż kod (ważny ok. 10 minut)</h2>
+        <p>Zalogowano. Twój kod:</p>
         <div class="copy-row">
           <input id="code-value" class="field-input" readonly />
-          <button id="code-copy" class="btn btn--ghost btn--sm" type="button">Kopiuj</button>
+          <button id="code-copy" class="btn btn--outline btn--sm" type="button">Kopiuj</button>
+          <button id="code-share" class="btn btn--primary btn--sm hidden" type="button">Wyślij…</button>
         </div>
-        <ol class="setup-steps">
-          <li>Otwórz <a id="actions-link" target="_blank" rel="noopener">workflow „Spotify – dociąganie odsłuchów”</a>.</li>
-          <li>Kliknij <b>Run workflow</b> (po prawej), wklej kod w pole i kliknij zielone <b>Run workflow</b>.</li>
-          <li>Po ok. minucie odśwież tę stronę — stan powinien być zielony.</li>
+        <ol class="setup-steps" id="code-owner-steps">
+          <li>Otwórz <a class="actions-link" target="_blank" rel="noopener">workflow „Spotify – dociąganie odsłuchów”</a>.</li>
+          <li>Kliknij <b>Run workflow</b> (po prawej), wklej kod, wybierz konto <b id="code-slot">1</b>, opcjonalnie wpisz nazwę i kliknij zielone <b>Run workflow</b>.</li>
+          <li>Po ok. minucie odśwież tę stronę — konto powinno być zielone.</li>
         </ol>
+        <p class="setup-note hidden" id="code-friend-note">Wyślij ten kod osobie, która dała Ci link — ona wklei go u siebie. Jeśli nie zdąży w 10 minut, po prostu zaloguj się jeszcze raz.</p>
       </section>
 
-      <section class="card">
-        <h2 class="card-title">Konfiguracja (jednorazowo)</h2>
+      <section class="card" id="status-card">
+        <h2 class="card-title">Konta</h2>
+        <p id="status-text" class="setup-status">Sprawdzam…</p>
+        <table class="slot-table hidden" id="slot-table"><tbody></tbody></table>
+      </section>
+
+      <section class="card" id="owner-card">
+        <h2 class="card-title">Konfiguracja (jednorazowo, robi to właściciel)</h2>
         <ol class="setup-steps">
           <li>
-            Wejdź na <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>,
-            zaloguj się i kliknij <b>Create app</b>. Nazwa i opis dowolne (np. „SpotiStats”).
+            Na <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> kliknij <b>Create app</b>.
             W <b>Redirect URIs</b> wklej dokładnie:
-            <div class="copy-row"><input id="redirect-uri" class="field-input" readonly /><button id="redirect-copy" class="btn btn--ghost btn--sm" type="button">Kopiuj</button></div>
-            i kliknij <b>Add</b>. W „Which API/SDKs are you planning to use?” zaznacz <b>Web API</b>, zaakceptuj warunki i <b>Save</b>.
-            <span class="setup-note">Spotify wymaga, żeby właściciel aplikacji miał Premium.</span>
+            <span class="copy-row"><input id="redirect-uri" class="field-input" readonly /><button id="redirect-copy" class="btn btn--outline btn--sm" type="button">Kopiuj</button></span>
+            kliknij <b>Add</b>, zaznacz <b>Web API</b>, zaakceptuj warunki i <b>Save</b>. <span class="setup-note">Spotify wymaga, żeby właściciel aplikacji miał Premium.</span>
           </li>
           <li>
-            W aplikacji wejdź w <b>Settings</b>, skopiuj <b>Client ID</b> i (po kliknięciu „View client secret”) <b>Client secret</b>.
-            Na GitHubie otwórz <a id="secrets-link" target="_blank" rel="noopener">Settings → Secrets and variables → Actions</a>
-            i dodaj dwa sekrety przyciskiem <b>New repository secret</b>:
-            <code>SPOTIFY_CLIENT_ID</code> oraz <code>SPOTIFY_CLIENT_SECRET</code>.
+            Z <b>Settings</b> aplikacji skopiuj Client ID i Client secret do
+            <a id="secrets-link" target="_blank" rel="noopener">sekretów repo</a> jako <code>SPOTIFY_CLIENT_ID</code> i <code>SPOTIFY_CLIENT_SECRET</code>.
           </li>
           <li>
-            Wklej tu Client ID (sekretu tu nie podawaj) i zaloguj się:
+            Zaloguj się jako konto:
             <form id="login-form" class="copy-row">
+              <select id="slot-select" class="field-input" style="min-width:0;flex:0 0 auto" aria-label="Konto">
+                <option value="1">1 — Ty</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+              </select>
               <input id="client-id" class="field-input" placeholder="Client ID" autocomplete="off" spellcheck="false" required pattern="[0-9a-fA-F]{32}" title="32 znaki 0-9 a-f" />
               <button class="btn btn--primary btn--sm" type="submit">Zaloguj przez Spotify</button>
             </form>
           </li>
-          <li>Po powrocie pojawi się kod do przekazania GitHubowi (karta wyżej).</li>
+          <li>Po powrocie pojawi się kod do wklejenia w <b>Run workflow</b>.</li>
         </ol>
-        <p class="setup-note">To samo robisz co ok. 6 miesięcy — Spotify unieważnia wtedy logowanie, a strona statystyk Ci o tym przypomni.</p>
+        <h3 class="sub-title">Dodanie znajomego (konta 2–5)</h3>
+        <ol class="setup-steps">
+          <li>W swojej aplikacji na developer.spotify.com → <b>User Management</b> dopisz imię i e-mail jego konta Spotify (limit Spotify: 5 osób łącznie z Tobą).</li>
+          <li>Wyślij mu link <code id="friend-link-example">spotify.html?konto=2</code> (numer = wolne miejsce). Zaloguje się i odeśle Ci kod.</li>
+          <li>Wklej kod w <a class="actions-link" target="_blank" rel="noopener">Run workflow</a>, wybierz to samo konto i wpisz jego imię.</li>
+        </ol>
+        <p class="setup-note">Odłączenie: Run workflow → wybierz konto → zaznacz „Odłącz to konto”. Logowanie wygasa po ok. 6 miesiącach — strona statystyk przypomni.</p>
       </section>
     </main>
 
-    <script src="./live.js?v=4"></script>
+    <script src="./live.js?v=5"></script>
     <script>
       (function () {
         'use strict';
         const L = window.SpotiLive;
         const CLIENT_KEY = 'ss_spotify_client_id';
         const STATE_KEY = 'ss_spotify_state';
+        const SLOT_KEY = 'ss_spotify_slot';
         // Musi być identyczny jak w workflow (scripts/spotify-sync.mjs → redirectUri), więc na github.io budujemy go z nazwy repo.
         const redirectUri = /\.github\.io$/i.test(location.hostname)
           ? `https://${location.hostname.toLowerCase()}/${L.repo().split('/')[1]}/spotify.html`
           : location.origin + location.pathname;
         const $ = (id) => document.getElementById(id);
+        const store = {
+          get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+          set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }
+        };
+        const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+        const q = new URLSearchParams(location.search);
+        const slotParam = Number(q.get('konto'));
+        const friendMode = slotParam >= 2 && slotParam <= 5;
 
         $('redirect-uri').value = redirectUri;
-        $('actions-link').href = L.actionsUrl();
+        document.querySelectorAll('.actions-link').forEach((a) => (a.href = L.actionsUrl()));
         $('secrets-link').href = `https://github.com/${L.repo()}/settings/secrets/actions`;
-        try { $('client-id').value = localStorage.getItem(CLIENT_KEY) || ''; } catch {}
+        $('client-id').value = store.get(CLIENT_KEY) || L.CLIENT_ID || '';
+        $('friend-link-example').textContent = `${redirectUri}?konto=2`;
+        if (slotParam >= 1 && slotParam <= 5) $('slot-select').value = String(slotParam);
+
+        if (friendMode) {
+          $('title').textContent = 'Dołącz do SpotiStats';
+          $('lead').textContent = 'Twoje nowe odsłuchy będą się co godzinę zapisywać, żeby było widać Twoje statystyki i porównania.';
+          $('friend-card').classList.remove('hidden');
+          $('owner-card').classList.add('hidden');
+          $('status-card').classList.add('hidden');
+        }
 
         function copy(inputId, btnId) {
           $(btnId).addEventListener('click', async () => {
@@ -98,36 +134,52 @@
         copy('redirect-uri', 'redirect-copy');
         copy('code-value', 'code-copy');
 
-        $('login-form').addEventListener('submit', (e) => {
-          e.preventDefault();
-          const clientId = $('client-id').value.trim();
+        function login(clientId, slot) {
           const state = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
-          try { localStorage.setItem(CLIENT_KEY, clientId); localStorage.setItem(STATE_KEY, state); } catch {}
+          store.set(CLIENT_KEY, clientId);
+          store.set(STATE_KEY, state);
+          store.set(SLOT_KEY, String(slot));
           const params = new URLSearchParams({
-            client_id: clientId,
-            response_type: 'code',
-            redirect_uri: redirectUri,
-            scope: 'user-read-recently-played',
-            state,
-            show_dialog: 'true'
+            client_id: clientId, response_type: 'code', redirect_uri: redirectUri,
+            scope: 'user-read-recently-played', state, show_dialog: 'true'
           });
           location.href = `https://accounts.spotify.com/authorize?${params}`;
+        }
+        $('login-form').addEventListener('submit', (e) => {
+          e.preventDefault();
+          login($('client-id').value.trim(), Number($('slot-select').value));
         });
+        $('friend-login').addEventListener('click', () => login(L.CLIENT_ID, slotParam));
 
         // Powrót ze Spotify
-        const q = new URLSearchParams(location.search);
-        if (q.has('code') || q.has('error')) {
-          let expected = null;
-          try { expected = localStorage.getItem(STATE_KEY); } catch {}
-          history.replaceState(null, '', location.pathname);
+        const returned = q.has('code') || q.has('error');
+        if (returned) {
+          const expected = store.get(STATE_KEY);
+          const slot = Number(store.get(SLOT_KEY)) || 1;
+          history.replaceState(null, '', location.pathname + (slot > 1 ? `?konto=${slot}` : ''));
           if (q.get('error')) {
-            $('status-text').textContent = `Spotify zwrócił błąd: ${q.get('error')}. Spróbuj jeszcze raz.`;
+            $('status-text').textContent = q.get('error') === 'access_denied'
+              ? 'Logowanie anulowane. Spróbuj jeszcze raz.'
+              : `Spotify zwrócił błąd: ${q.get('error')}. Jeśli to konto znajomego, sprawdź, czy jest dopisany w User Management.`;
+            $('status-card').classList.remove('hidden');
           } else {
             // Na telefonie logowanie często przejmuje aplikacja Spotify i wraca w innej karcie,
             // więc nie blokujemy przy niezgodnym „state” — sam kod i tak nic nie daje bez sekretu z GitHuba.
             if (expected && q.get('state') !== expected) console.warn('state nie pasuje — pokazuję kod mimo to');
-            $('code-value').value = q.get('code');
-            $('code-card').hidden = false;
+            const code = q.get('code');
+            $('code-value').value = code;
+            $('code-slot').textContent = String(slot);
+            $('code-card').classList.remove('hidden');
+            $('friend-card').classList.add('hidden');
+            if (slot > 1) {
+              $('code-owner-steps').classList.add('hidden');
+              $('code-friend-note').classList.remove('hidden');
+              $('code-title').textContent = 'Wyślij ten kod (ważny ok. 10 minut)';
+              if (navigator.share) {
+                $('code-share').classList.remove('hidden');
+                $('code-share').addEventListener('click', () => navigator.share({ text: `Kod SpotiStats (konto ${slot}): ${code}` }).catch(() => {}));
+              }
+            }
             $('code-card').scrollIntoView();
           }
         }
@@ -135,26 +187,23 @@
         function fmt(iso) {
           return iso ? new Date(iso).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
         }
+        function describe(a) {
+          if (!a.connectedAt) return '<span style="color:var(--text-3)">wolne miejsce</span>';
+          const left = Math.round(L.TOKEN_LIFETIME_DAYS - L.tokenAgeDays(a));
+          if (a.error === 'invalid_grant') return '🔴 logowanie wygasło — zaloguj ponownie i wklej nowy kod';
+          if (a.error) return `🟠 błąd: ${esc(a.error)}`;
+          return `🟢 ostatnia synchronizacja ${fmt(a.lastSync)}` + (left <= 14 ? ` · ⚠️ logowanie wygaśnie za ${Math.max(left, 0)} dni` : ` · ważne jeszcze ok. ${left} dni`);
+        }
 
-        L.loadStatus().then((s) => {
-          const el = $('status-text');
-          if (q.has('code') && !(s && s.connectedAt)) { el.textContent = 'Zalogowano w Spotify — przekaż kod do GitHuba (karta niżej).'; return; }
-          if (!s || !s.connectedAt) {
-            el.innerHTML = '⚪ Jeszcze nie połączono. Wykonaj kroki poniżej.';
-            return;
-          }
-          const age = L.tokenAgeDays(s);
-          const left = Math.round(L.TOKEN_LIFETIME_DAYS - age);
-          if (s.error === 'invalid_grant') {
-            el.innerHTML = '🔴 Logowanie do Spotify wygasło albo zostało cofnięte. Zaloguj się ponownie (krok 3) i przekaż nowy kod.';
-          } else if (s.error) {
-            el.textContent = `🟠 Ostatnia próba (${fmt(s.errorAt)}) się nie udała: ${s.error}`;
-          } else {
-            el.innerHTML = `🟢 Działa. Ostatnia synchronizacja: <b>${fmt(s.lastSync)}</b>, ostatni utwór: <b>${fmt(s.lastPlayedAt)}</b>. ` +
-              (left > 14 ? `Logowanie ważne jeszcze ok. ${left} dni.` : `⚠️ Logowanie wygaśnie za ok. ${Math.max(left, 0)} dni — zaloguj się ponownie.`);
-          }
+        L.loadAccounts().then((accounts) => {
+          const any = accounts.some((a) => a.connectedAt);
+          if (!returned || !q.has('code')) $('status-text').textContent = any ? '' : '⚪ Jeszcze nikt nie jest podłączony. Wykonaj kroki poniżej.';
+          else $('status-text').textContent = 'Zalogowano w Spotify — przekaż kod (karta wyżej).';
+          $('slot-table').querySelector('tbody').innerHTML = accounts.map((a) =>
+            `<tr><td>${a.slot}</td><td><b>${esc(a.name || (a.connectedAt ? (a.slot === 1 ? 'Ty' : `Konto ${a.slot}`) : '—'))}</b></td><td>${describe(a)}</td></tr>`).join('');
+          $('slot-table').classList.remove('hidden');
         }).catch(() => {
-          $('status-text').textContent = q.has('code') ? 'Zalogowano w Spotify — przekaż kod do GitHuba (karta niżej).' : 'Nie udało się sprawdzić stanu (brak połączenia z GitHubem?).';
+          $('status-text').textContent = 'Nie udało się sprawdzić stanu (brak połączenia z GitHubem?).';
         });
       })();
     </script>

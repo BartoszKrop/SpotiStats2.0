@@ -3,135 +3,183 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#121212" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=4" />
+    <link rel="stylesheet" href="./styles.css?v=5" />
   </head>
   <body>
-    <nav class="topbar" aria-label="Nawigacja">
-      <div class="topbar-brand">
-        <span class="logo-icon" aria-hidden="true">◎</span>
-        <span class="logo-text">SpotiStats</span>
-      </div>
-      <div id="topbar-actions" class="topbar-right hidden">
-        <span id="data-info" class="data-info"></span>
-        <label class="btn btn--ghost btn--sm" title="Wczytaj nowszy eksport (zastąpi obecne dane)">
-          ↺ Importuj ponownie
-          <input id="reimport-files" type="file" accept=".zip,.json,application/json,application/zip" multiple class="sr-only" />
-        </label>
-        <a class="btn btn--ghost btn--sm" href="./spotify.html" title="Automatyczne dociąganie odsłuchów">⟳ Automat</a>
-        <button id="btn-clear-data" class="btn btn--ghost btn--sm btn--danger" type="button">✕ Usuń dane</button>
-      </div>
-    </nav>
+    <div class="layout">
+      <!-- ─── PASEK BOCZNY ─────────────────────────────────── -->
+      <aside class="sidebar" aria-label="Nawigacja">
+        <a class="brand" href="./">
+          <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg></span>
+          <span class="brand-name">SpotiStats</span>
+        </a>
 
-    <!-- ─── IMPORT ─────────────────────────────────────────── -->
-    <main id="state-empty" class="state-empty hidden">
-      <div class="import-hero">
-        <div class="import-hero__icon" aria-hidden="true">🎵</div>
-        <h1 class="import-hero__title">Wczytaj swoją historię ze Spotify</h1>
-        <p class="import-hero__desc">
-          Poproś o <strong>„Rozszerzoną historię strumieniowania”</strong> (Extended streaming history) na
-          <strong>spotify.com → Konto → Prywatność</strong>. Spotify wyśle maila z plikiem
-          <strong>.zip</strong> — wrzuć go tutaj w całości. Możesz też wybrać pliki
-          <code>Streaming_History_Audio_*.json</code>.
-        </p>
+        <nav class="side-nav" aria-label="Sekcje">
+          <a href="#sec-top" class="side-link">Topki</a>
+          <a href="#sec-kings" class="side-link">Nr 1 tygodnia</a>
+          <a href="#sec-trend" class="side-link">Top 10 w czasie</a>
+          <a href="#artist-card" class="side-link">Wykonawca</a>
+          <a href="./spotify.html" class="side-link">Automat</a>
+        </nav>
 
-        <label class="drop-zone" id="drop-zone" tabindex="0" role="button" aria-label="Wybierz plik eksportu Spotify">
-          <input id="import-files" type="file" accept=".zip,.json,application/json,application/zip" multiple class="sr-only" />
-          <span class="drop-zone__icon" aria-hidden="true">⬆</span>
-          <span class="drop-zone__title">Upuść plik albo kliknij, żeby wybrać</span>
-          <span class="drop-zone__hint">.zip z eksportu albo kilka plików .json</span>
-        </label>
-
-        <p id="import-status" class="import-status" role="status" aria-live="polite"></p>
-        <button id="btn-load-demo" class="btn btn--ghost btn--sm" type="button">Pokaż na danych przykładowych</button>
-        <p class="import-note">Eksport zostaje w tej przeglądarce (IndexedDB). Nic nie jest wysyłane na serwer.</p>
-        <p class="import-note"><a href="./spotify.html" style="color:var(--accent)">Automatyczne dociąganie nowych odsłuchów →</a></p>
-      </div>
-    </main>
-
-    <!-- ─── PANEL ──────────────────────────────────────────── -->
-    <main id="state-data" class="state-data hidden">
-      <div class="toolbar" role="group" aria-label="Zakres i sortowanie">
-        <div class="pills" id="range-pills">
-          <button class="pill" data-range="7d" type="button">7 dni</button>
-          <button class="pill" data-range="28d" type="button">28 dni</button>
-          <button class="pill" data-range="6m" type="button">Pół roku</button>
-          <span class="pill pill--select" data-range="year">
-            <select id="year-select" aria-label="Rok"></select>
-          </span>
-          <button class="pill" data-range="all" type="button">Cały czas</button>
+        <div class="side-section">
+          <h2 class="side-title">Konta</h2>
+          <ul id="account-list" class="account-list" aria-label="Czyje statystyki"></ul>
         </div>
-        <div class="pills pills--small" id="sort-pills" aria-label="Sortuj według">
-          <button class="pill" data-sort="ms" type="button">wg czasu</button>
-          <button class="pill" data-sort="plays" type="button">wg odtworzeń</button>
-        </div>
-      </div>
-      <p id="range-label" class="range-label"></p>
-      <p id="live-banner" class="live-banner hidden" role="status"></p>
+      </aside>
 
-      <section id="kpi-row" class="kpi-row" aria-label="Podsumowanie"></section>
+      <main class="main">
+        <!-- ─── NAGŁÓWEK PROFILU ─────────────────────────────── -->
+        <header class="hero" id="hero">
+          <div id="hero-avatar" class="avatar avatar--xl" aria-hidden="true"></div>
+          <div class="hero-text">
+            <span class="hero-kicker">Profil</span>
+            <h1 id="hero-name" class="hero-name">SpotiStats</h1>
+            <p id="hero-sub" class="hero-sub"></p>
+          </div>
+          <div class="hero-actions" id="topbar-actions">
+            <label class="btn btn--outline btn--sm" title="Wczytaj eksport Spotify dla tego konta (zastąpi poprzedni)">
+              ↺ Importuj eksport
+              <input id="reimport-files" type="file" accept=".zip,.json,application/json,application/zip" multiple class="sr-only" />
+            </label>
+            <button id="btn-clear-data" class="btn btn--ghost btn--sm" type="button" title="Usuń eksport tego konta z przeglądarki">Usuń eksport</button>
+          </div>
+        </header>
 
-      <section class="tops-grid">
-        <div class="card">
-          <h2 class="card-title">Top 10 wykonawców</h2>
-          <div id="top-artists"></div>
-        </div>
-        <div class="card">
-          <h2 class="card-title">Top 10 utworów</h2>
-          <div id="top-tracks"></div>
-        </div>
-        <div class="card">
-          <h2 class="card-title">Top 10 albumów</h2>
-          <div id="top-albums"></div>
-        </div>
-      </section>
+        <!-- ─── IMPORT / PUSTE KONTO ─────────────────────────── -->
+        <section id="state-empty" class="state-empty hidden">
+          <div class="import-hero">
+            <h2 class="import-hero__title" id="empty-title">Wczytaj swoją historię ze Spotify</h2>
+            <p class="import-hero__desc">
+              Poproś o <strong>„Rozszerzoną historię strumieniowania”</strong> (Extended streaming history) na
+              <strong>spotify.com → Konto → Prywatność</strong>. Spotify wyśle maila z plikiem
+              <strong>.zip</strong> — wrzuć go tutaj w całości.
+            </p>
+            <label class="drop-zone" id="drop-zone" tabindex="0" role="button" aria-label="Wybierz plik eksportu Spotify">
+              <input id="import-files" type="file" accept=".zip,.json,application/json,application/zip" multiple class="sr-only" />
+              <span class="drop-zone__icon" aria-hidden="true">⬆</span>
+              <span class="drop-zone__title">Upuść plik albo kliknij, żeby wybrać</span>
+              <span class="drop-zone__hint">.zip z eksportu albo kilka plików .json</span>
+            </label>
+            <p id="import-status" class="import-status" role="status" aria-live="polite"></p>
+            <div id="friend-help" class="friend-help hidden"></div>
+            <button id="btn-load-demo" class="btn btn--ghost btn--sm" type="button">Pokaż na danych przykładowych</button>
+            <p class="import-note">Eksport zostaje w tej przeglądarce. Nic nie jest wysyłane na serwer.</p>
+          </div>
+        </section>
 
-      <section class="card card--wide">
-        <div class="card-head">
-          <h2 class="card-title">Top 10 w czasie</h2>
-          <div class="card-controls">
-            <div class="seg" id="top-kind" role="group" aria-label="Co pokazać">
-              <button type="button" data-kind="artist">Wykonawcy</button>
-              <button type="button" data-kind="track">Utwory</button>
+        <!-- ─── PANEL ────────────────────────────────────────── -->
+        <div id="state-data" class="state-data hidden">
+          <div class="toolbar" role="group" aria-label="Zakres i sortowanie">
+            <div class="chips" id="range-pills">
+              <button class="chip" data-range="7d" type="button">7 dni</button>
+              <button class="chip" data-range="28d" type="button">28 dni</button>
+              <button class="chip" data-range="6m" type="button">Pół roku</button>
+              <span class="chip chip--select" data-range="year"><select id="year-select" aria-label="Rok"></select></span>
+              <button class="chip" data-range="all" type="button">Cały czas</button>
             </div>
-            <div class="seg" id="top-unit" role="group" aria-label="Agregacja">
-              <button type="button" data-unit="day">Dni</button>
-              <button type="button" data-unit="week">Tygodnie</button>
-              <button type="button" data-unit="month">Miesiące</button>
+            <div class="chips chips--quiet" id="sort-pills" aria-label="Sortuj według">
+              <button class="chip" data-sort="ms" type="button">Minuty</button>
+              <button class="chip" data-sort="plays" type="button">Odtworzenia</button>
             </div>
           </div>
-        </div>
-        <div id="top-legend" class="legend" aria-label="Legenda — kliknij, by pokazać lub ukryć"></div>
-        <div id="top-chart"></div>
-        <p class="hint">Minuty słuchania w każdym okresie. Kliknij nazwę w legendzie, żeby ją pokazać lub ukryć (max 8 naraz).</p>
-      </section>
+          <p id="range-label" class="range-label"></p>
+          <p id="live-banner" class="live-banner hidden" role="status"></p>
 
-      <section class="card card--wide" id="artist-card">
-        <div class="card-head">
-          <h2 class="card-title">Wykonawca w czasie</h2>
-          <div class="card-controls">
-            <input id="artist-search" class="field-input" list="artist-list" placeholder="Wpisz wykonawcę…" autocomplete="off" spellcheck="false" />
-            <datalist id="artist-list"></datalist>
-            <div class="seg" id="artist-span" role="group" aria-label="Okres wykresu">
-              <button type="button" data-span="all">Cały czas</button>
-              <button type="button" data-span="range">Wybrany zakres</button>
+          <section id="kpi-row" class="kpi-row" aria-label="Podsumowanie"></section>
+
+          <section id="sec-top" class="section">
+            <div class="section-head"><h2 class="section-title">Top wykonawcy</h2><span class="section-hint">Kliknij, żeby zobaczyć wykres</span></div>
+            <div id="top-artists" class="artist-grid"></div>
+          </section>
+
+          <section class="two-col">
+            <div class="section">
+              <div class="section-head"><h2 class="section-title">Top utwory</h2></div>
+              <div id="top-tracks"></div>
             </div>
-            <div class="seg" id="artist-unit" role="group" aria-label="Agregacja">
-              <button type="button" data-unit="day">Dni</button>
-              <button type="button" data-unit="week">Tygodnie</button>
-              <button type="button" data-unit="month">Miesiące</button>
+            <div class="section">
+              <div class="section-head"><h2 class="section-title">Top albumy</h2></div>
+              <div id="top-albums"></div>
             </div>
-          </div>
+          </section>
+
+          <section id="sec-kings" class="section card">
+            <div class="section-head">
+              <h2 class="section-title">Nr 1 tygodnia</h2>
+              <div class="card-controls">
+                <div class="seg" id="kings-unit" role="group" aria-label="Okres">
+                  <button type="button" data-unit="week">Tygodnie</button>
+                  <button type="button" data-unit="month">Miesiące</button>
+                </div>
+              </div>
+            </div>
+            <div class="kings">
+              <div class="kings-side">
+                <div id="kings-now" class="kings-now"></div>
+                <h3 class="sub-title">Najwięcej razy na szczycie</h3>
+                <ol id="kings-list" class="kings-list"></ol>
+              </div>
+              <div class="kings-chart">
+                <div id="kings-legend" class="legend"></div>
+                <div id="kings-chart"></div>
+                <p class="hint">Pozycja w rankingu wykonawców w każdym okresie (#1 na górze). Przerwa w linii = poza top 10.</p>
+              </div>
+            </div>
+          </section>
+
+          <section id="sec-trend" class="section card">
+            <div class="section-head">
+              <h2 class="section-title">Top 10 w czasie</h2>
+              <div class="card-controls">
+                <div class="seg" id="top-kind" role="group" aria-label="Co pokazać">
+                  <button type="button" data-kind="artist">Wykonawcy</button>
+                  <button type="button" data-kind="track">Utwory</button>
+                </div>
+                <div class="seg" id="top-unit" role="group" aria-label="Agregacja">
+                  <button type="button" data-unit="day">Dni</button>
+                  <button type="button" data-unit="week">Tygodnie</button>
+                  <button type="button" data-unit="month">Miesiące</button>
+                </div>
+              </div>
+            </div>
+            <div id="top-legend" class="legend" aria-label="Legenda — kliknij, by pokazać lub ukryć"></div>
+            <div id="top-chart"></div>
+            <p class="hint">Minuty słuchania w każdym okresie. Kliknij nazwę w legendzie, żeby ją pokazać lub ukryć (max 8 naraz).</p>
+          </section>
+
+          <section class="section card" id="artist-card">
+            <div class="section-head">
+              <h2 class="section-title">Wykonawca w czasie</h2>
+              <div class="card-controls">
+                <input id="artist-search" class="field-input" list="artist-list" placeholder="Szukaj wykonawcy…" autocomplete="off" spellcheck="false" />
+                <datalist id="artist-list"></datalist>
+                <div class="seg" id="artist-span" role="group" aria-label="Okres wykresu">
+                  <button type="button" data-span="all">Cały czas</button>
+                  <button type="button" data-span="range">Wybrany zakres</button>
+                </div>
+                <div class="seg" id="artist-unit" role="group" aria-label="Agregacja">
+                  <button type="button" data-unit="day">Dni</button>
+                  <button type="button" data-unit="week">Tygodnie</button>
+                  <button type="button" data-unit="month">Miesiące</button>
+                </div>
+              </div>
+            </div>
+            <div id="artist-body"></div>
+          </section>
+
+          <p id="data-info" class="data-info"></p>
         </div>
-        <div id="artist-body"></div>
-      </section>
-    </main>
+      </main>
+    </div>
 
     <script src="./jszip.min.js"></script>
-    <script src="./analytics.js?v=4"></script>
-    <script src="./charts.js?v=4"></script>
-    <script src="./live.js?v=4"></script>
-    <script src="./app.js?v=4"></script>
+    <script src="./analytics.js?v=5"></script>
+    <script src="./charts.js?v=5"></script>
+    <script src="./live.js?v=5"></script>
+    <script src="./app.js?v=5"></script>
   </body>
 </html>
