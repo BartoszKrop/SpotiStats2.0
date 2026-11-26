@@ -174,3 +174,26 @@ test('listeningHours: godziny i dni tygodnia w czasie lokalnym', () => {
   assert.equal(r.peakDay, 0);
   assert.equal(A.listeningHours([]).peakHour, null);
 });
+
+test('records: najdłuższa seria na nr 1, łączna liczba tygodni i największy peak', () => {
+  const t = (d) => new Date(2026, 0, d, 12).getTime(); // 5 sty 2026 = poniedziałek
+  const rows = [
+    { t: t(5), artist: 'A', track: 'a1', ms: 300000 }, { t: t(6), artist: 'B', track: 'b1', ms: 100000 },   // tydz. 1: A
+    { t: t(12), artist: 'A', track: 'a1', ms: 200000 }, { t: t(13), artist: 'B', track: 'b1', ms: 100000 }, // tydz. 2: A
+    { t: t(19), artist: 'B', track: 'b1', ms: 500000 },                                                    // tydz. 3: B
+    { t: t(26), artist: 'A', track: 'a2', ms: 900000 },                                                    // tydz. 4: A
+    { t: t(2 + 35), artist: 'A', track: 'a2', ms: 100000 }                                                 // tydz. 6 (po przerwie): A
+  ];
+  const r = A.records(rows, 'artist');
+  assert.equal(r.longest.name, 'A');
+  assert.equal(r.longest.weeks, 2);
+  assert.equal(r.leaders[0].name, 'A');
+  assert.equal(r.leaders[0].weeks, 4);
+  assert.equal(r.leaders[0].longest, 2);
+  assert.equal(r.leaders.find((x) => x.name === 'B').weeks, 1);
+  assert.equal(r.peaks[0].name, 'A');
+  assert.equal(r.peaks[0].ms, 900000);
+  const tr = A.records(rows, 'track');
+  assert.equal(tr.peaks[0].name, 'a2');
+  assert.equal(tr.peaks[0].week, new Date(2026, 0, 26).getTime());
+});
