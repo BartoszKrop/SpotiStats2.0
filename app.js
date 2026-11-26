@@ -232,16 +232,34 @@
   function avatar(name, cls = '') {
     return `<span class="avatar ${cls}" style="--h:${hueOf(name)}" aria-hidden="true">${esc(initials(name))}</span>`;
   }
+  /* Brakujące zdjęcia i okładki dociągane z publicznego API Deezera (tylko nazwy wykonawców/albumów). */
+  const isDemo = () => !!(state.meta && state.meta.demo);
+  let art = null;
+  let renderTimer = 0;
+  const warming = new Set();
+  function scheduleRender() {
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(() => render(), 400);
+  }
+  function warm(url) {
+    if (warming.has(url)) return;
+    warming.add(url);
+    preloadImages([url], 1, 8000).then(() => { if (state.imagesReady.has(url)) scheduleRender(); });
+  }
+  try {
+    if (window.SpotiArt) art = SpotiArt.createLoader({ storage: window.localStorage, onChange: scheduleRender });
+  } catch { art = null; }
+
   /** Zdjęcie wykonawcy, jeśli automat je zdobył — inaczej kolorowe inicjały. */
   function artistAvatar(name, cls = '') {
-    const img = state.images.get(String(name).toLowerCase());
-    if (!img || !state.imagesReady.has(img)) return avatar(name, cls);
+    const img = state.images.get(String(name).toLowerCase()) || (art && !isDemo() ? art.artist(name) : null);
+    if (!img || !state.imagesReady.has(img)) { if (img) warm(img); return avatar(name, cls); }
     return `<span class="avatar avatar--img ${cls}" style="--h:${hueOf(name)}" aria-hidden="true"><img src="${esc(img)}" alt="" decoding="sync" referrerpolicy="no-referrer" onerror="this.remove()" />${esc(initials(name))}</span>`;
   }
   /** Okładka albumu (utworu / albumu), jeśli automat ją zdobył — inaczej kolorowe inicjały. */
   function coverAvatar(title, artist, album, cls = '') {
-    const img = album ? state.covers.get(`${String(artist).toLowerCase()}|${String(album).toLowerCase()}`) : null;
-    if (!img || !state.imagesReady.has(img)) return avatar(title, cls);
+    const img = album ? state.covers.get(`${String(artist).toLowerCase()}|${String(album).toLowerCase()}`) || (art && !isDemo() ? art.cover(artist, album) : null) : null;
+    if (!img || !state.imagesReady.has(img)) { if (img) warm(img); return avatar(title, cls); }
     return `<span class="avatar avatar--img ${cls}" style="--h:${hueOf(title)}" aria-hidden="true"><img src="${esc(img)}" alt="" decoding="sync" referrerpolicy="no-referrer" onerror="this.remove()" />${esc(initials(title))}</span>`;
   }
   /** Wczytuje zdjęcia w tle; strona przerysowuje się raz, gdy są gotowe (nie co zdjęcie). */
