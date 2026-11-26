@@ -16,6 +16,7 @@
  *   konta/<n>/token.json           — refresh token zaszyfrowany AES-256-GCM kluczem z SPOTIFY_CLIENT_SECRET
  *   konta/<n>/odsluchy/<rok>.json  — odsłuchy w formacie rozszerzonego eksportu Spotify
  *   wykonawcy.json                 — zdjęcia wykonawców (nazwa małymi literami → { name, img, at })
+ *   okladki.json                   — okładki albumów („wykonawca|album” małymi literami → { img, at })
  */
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -243,17 +244,66 @@ export async function updateArtistImages(root, accessToken, names, { max = IMAGE
   return { checked: todo.length, found };
 }
 
-/** Nazwy wykonawców z odsłuchów konta, od najczęściej słuchanych. */
-async function artistNames(dir) {
+export const coverKey = (artist, album) => `${String(artist).toLowerCase()}|${String(album).toLowerCase()}`;
+
+/** Okładki albumów (wyszukiwanie po albumie i wykonawcy, tylko dokładne dopasowanie nazwy albumu). */
+export async function updateAlbumCovers(root, accessToken, pairs, { max = IMAGES_PER_RUN, now = Date.now() } = {}) {
+  const path = join(root, 'okladki.json');
+  const known = await readJson(path, {});
+  const retryBefore = now - IMAGE_RETRY_DAYS * 86_400_000;
+  const seen = new Set();
+  const todo = [];
+  for (const { artist, album } of pairs) {
+    if (!artist || !album) continue;
+    const key = coverKey(artist, album);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const e = known[key];
+    if (!e || (!e.img && Date.parse(e.at || 0) < retryBefore)) todo.push({ key, artist, album });
+    if (todo.length >= max) break;
+  }
+  let found = 0;
+  for (const { key, artist, album } of todo) {
+    const q = `album:${album.replace(/"/g, '')} artist:${artist.replace(/"/g, '')}`;
+    const res = await fetch(`${SEARCH_URL}?type=album&limit=5&q=${encodeURIComponent(q)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (res.status === 429) break;
+    if (!res.ok) throw new Error(`Spotify search: ${res.status}`);
+    const items = (await res.json())?.albums?.items || [];
+    const hit = items.find((a) => a && String(a.name).toLowerCase() === album.toLowerCase());
+    const img = hit ? pickImage(hit.images, 100) : null;
+    if (img) found++;
+    known[key] = { img, at: new Date(now).toISOString() };
+  }
+  if (todo.length) {
+    await writeJson(path, known);
+    console.log(`Okładki albumów: sprawdzono ${todo.length}, znaleziono ${found}.`);
+  }
+  return { checked: todo.length, found };
+}
+
+/** Wykonawcy i albumy z odsłuchów konta, od najczęściej słuchanych. */
+async function listened(dir) {
   const status = await readJson(join(dir, 'status.json'), {});
-  const count = new Map();
+  const artists = new Map();
+  const albums = new Map();
   for (const f of status.files || []) {
     for (const r of await readJson(join(dir, f), [])) {
-      const n = r.master_metadata_album_artist_name;
-      if (n) count.set(n, (count.get(n) || 0) + (r.ms_played || 0));
+      const artist = r.master_metadata_album_artist_name;
+      const album = r.master_metadata_album_album_name;
+      if (!artist) continue;
+      artists.set(artist, (artists.get(artist) || 0) + (r.ms_played || 0));
+      if (album) {
+        const key = coverKey(artist, album);
+        const e = albums.get(key) || { artist, album, ms: 0 };
+        e.ms += r.ms_played || 0;
+        albums.set(key, e);
+      }
     }
   }
-  return [...count.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n);
+  return {
+    artists: [...artists.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n),
+    albums: [...albums.values()].sort((a, b) => b.ms - a.ms)
+  };
 }
 
 // ─────────────────────────────────────────────── wiele kont
@@ -310,9 +360,11 @@ export async function syncAll(root, env = process.env) {
     try {
       const { accessToken } = await sync(dir, env);
       try {
-        await updateArtistImages(root, accessToken, await artistNames(dir));
+        const heard = await listened(dir);
+        await updateArtistImages(root, accessToken, heard.artists);
+        await updateAlbumCovers(root, accessToken, heard.albums);
       } catch (err) {
-        console.error(`Zdjęcia wykonawców (konto ${slot}): ${err.message}`); // nie psuje synchronizacji
+        console.error(`Zdjęcia i okładki (konto ${slot}): ${err.message}`); // nie psuje synchronizacji
       }
     } catch (err) {
       console.error(`Konto ${slot}: ${err.message}`);

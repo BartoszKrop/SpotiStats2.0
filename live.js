@@ -69,10 +69,18 @@
     return map;
   }
 
+  /** Okładki albumów zebrane przez automat: Map(„wykonawca|album” małymi literami → url). */
+  async function loadAlbumCovers() {
+    const data = (await getJson('okladki.json')) || {};
+    const map = new Map();
+    for (const [k, v] of Object.entries(data)) if (v && v.img) map.set(k, v.img);
+    return map;
+  }
+
   function tokenAgeDays(account) {
     if (!account || !account.connectedAt) return null;
     return (Date.now() - Date.parse(account.connectedAt)) / 86_400_000;
   }
 
-  root.SpotiLive = { CLIENT_ID, SLOTS, repo, rawUrl, actionsUrl, loadAccounts, loadRows, loadArtistImages, tokenAgeDays, TOKEN_LIFETIME_DAYS };
+  root.SpotiLive = { CLIENT_ID, SLOTS, repo, rawUrl, actionsUrl, loadAccounts, loadRows, loadArtistImages, loadAlbumCovers, tokenAgeDays, TOKEN_LIFETIME_DAYS };
 })(globalThis);

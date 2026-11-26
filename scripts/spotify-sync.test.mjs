@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { encryptToken, decryptToken, itemToRow, mergeRows, redirectUri, connect, sync, migrateLegacy, syncAll, connectSlot, disconnectSlot, pickImage, updateArtistImages } from './spotify-sync.mjs';
+import { encryptToken, decryptToken, itemToRow, mergeRows, redirectUri, connect, sync, migrateLegacy, syncAll, connectSlot, disconnectSlot, pickImage, updateArtistImages, updateAlbumCovers, coverKey } from './spotify-sync.mjs';
 import { stat } from 'node:fs/promises';
 
 const item = (playedAt, name, artist = 'Artist') => ({
@@ -192,4 +192,18 @@ test('updateArtistImages: dokładne dopasowanie, pamięta braki, nie pyta drugi 
   assert.equal(known['nieznany'].img, null);
   const again = await updateArtistImages(root, 'acc', ['sanah', 'Nieznany']);
   assert.equal(again.checked, 0);
+});
+
+test('updateAlbumCovers: dokładna nazwa albumu, brak zapamiętany, bez powtórek', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ss-'));
+  const calls = mockFetch((url) => ({ body: { albums: { items: url.includes('Dobry') || url.includes('dobry')
+    ? [{ name: 'Inny', images: [{ url: 'zly', width: 300 }] }, { name: 'Dobry Album', images: [{ url: 'https://i/cover', width: 300 }, { url: 'https://i/small', width: 64 }] }]
+    : [] } } }));
+  const pairs = [{ artist: 'Ala', album: 'Dobry Album' }, { artist: 'Ala', album: 'Dobry Album' }, { artist: 'Ola', album: 'Brak' }];
+  assert.deepEqual(await updateAlbumCovers(root, 'acc', pairs), { checked: 2, found: 1 });
+  assert.match(calls[0].url, /type=album/);
+  const known = JSON.parse(await readFile(join(root, 'okladki.json'), 'utf8'));
+  assert.equal(known[coverKey('Ala', 'Dobry Album')].img, 'https://i/cover');
+  assert.equal(known[coverKey('Ola', 'Brak')].img, null);
+  assert.equal((await updateAlbumCovers(root, 'acc', pairs)).checked, 0);
 });
