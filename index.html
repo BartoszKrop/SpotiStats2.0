@@ -4,9 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#121212" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./ikony/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="SpotiStats" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=16" />
+    <link rel="stylesheet" href="./styles.css?v=17" />
   </head>
   <body>
     <div class="layout">
@@ -69,7 +75,8 @@
             <p id="import-status" class="import-status" role="status" aria-live="polite"></p>
             <div id="friend-help" class="friend-help hidden"></div>
             <button id="btn-load-demo" class="btn btn--ghost btn--sm" type="button">Pokaż na danych przykładowych</button>
-            <p class="import-note">Eksport zostaje w tej przeglądarce. Nic nie jest wysyłane na serwer.</p>
+            <p class="import-note">Eksport zostaje w tej przeglądarce i wczytuje się sam przy każdym wejściu — wgrywasz go tylko raz. Nic nie jest wysyłane na serwer.</p>
+            <p class="import-note">💡 Otwórz stronę w zwykłej przeglądarce (Safari / Chrome), a nie z okienka innej aplikacji, i dodaj ją do ekranu głównego — wtedy dane na pewno zostają.</p>
           </div>
         </section>
 
@@ -211,9 +218,9 @@
     </nav>
 
     <script src="./jszip.min.js"></script>
-    <script src="./analytics.js?v=16"></script>
-    <script src="./charts.js?v=16"></script>
-    <script src="./live.js?v=16"></script>
-    <script src="./app.js?v=16"></script>
+    <script src="./analytics.js?v=17"></script>
+    <script src="./charts.js?v=17"></script>
+    <script src="./live.js?v=17"></script>
+    <script src="./app.js?v=17"></script>
   </body>
 </html>
