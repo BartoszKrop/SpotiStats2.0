@@ -22,7 +22,7 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 16px; -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
-body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: clip; }
 a { color: inherit; }
 code { font-size: 0.85em; background: var(--elev); padding: 0.1em 0.35em; border-radius: 4px; }
 button { font: inherit; color: inherit; }
@@ -50,7 +50,7 @@ button { font: inherit; color: inherit; }
   position: sticky; top: 8px; align-self: start; height: calc(100vh - 16px); overflow-y: auto;
   background: var(--base); border-radius: var(--radius); padding: 1.25rem 0.75rem; display: flex; flex-direction: column; gap: 1.5rem;
 }
-.main { background: var(--base); border-radius: var(--radius); overflow: hidden; min-width: 0; }
+.main { background: var(--base); border-radius: var(--radius); overflow: clip; min-width: 0; }
 
 .brand { display: flex; align-items: center; gap: 0.6rem; text-decoration: none; padding: 0 0.6rem; }
 .brand-mark { color: var(--green); display: inline-flex; }
@@ -125,7 +125,7 @@ button { font: inherit; color: inherit; }
 .state-data { padding: 0.5rem 2rem 3rem; display: flex; flex-direction: column; gap: 1.75rem; }
 .toolbar {
   position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: space-between; align-items: center;
-  padding: 0.9rem 0; margin: 0 -2rem; padding-inline: 2rem; background: rgba(18, 18, 18, 0.92); backdrop-filter: blur(10px);
+  padding: 0.9rem 0; margin: 0 -2rem; padding-inline: 2rem; background: rgba(18, 18, 18, 0.97); backdrop-filter: blur(10px);
 }
 .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .chip {
@@ -348,3 +348,23 @@ button { font: inherit; color: inherit; }
 .bar.is-peak .bar__fill, .bar.is-peak:hover .bar__fill { background: var(--green); }
 .bar__label { position: absolute; bottom: -1.3rem; left: 50%; transform: translateX(-50%); font-size: 0.7rem; color: var(--text-3); white-space: nowrap; }
 @media (max-width: 900px) { .when { grid-template-columns: minmax(0, 1fr); gap: 1.8rem; } }
+
+/* Nawigacja po sekcjach: kotwice nie chowają się pod przypiętym paskiem, aktywna sekcja podświetlona */
+.section, #artist-card { scroll-margin-top: 4.5rem; }
+.side-link.is-active { color: var(--text); background: var(--elev); }
+.bottom-nav { display: none; }
+@media (max-width: 900px) {
+  .section, #artist-card { scroll-margin-top: 7rem; }
+  body.has-data { padding-bottom: 4.2rem; }
+  body.has-data .bottom-nav {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; justify-content: space-around;
+    padding: 0.35rem 0.25rem calc(0.35rem + env(safe-area-inset-bottom)); background: rgba(10, 10, 10, 0.94);
+    backdrop-filter: blur(12px); border-top: 1px solid #222;
+  }
+  .bottom-nav a {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.1rem; padding: 0.3rem 0.1rem; border-radius: 8px;
+    color: var(--text-2); text-decoration: none; font-size: 0.68rem; font-weight: 700;
+  }
+  .bottom-nav a.is-active { color: var(--green); }
+  .bn-ico { font-size: 1.15rem; line-height: 1; }
+}

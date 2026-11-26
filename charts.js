@@ -212,7 +212,10 @@
     }
     hit.addEventListener('pointermove', (e) => show(indexAt(e)));
     hit.addEventListener('pointerdown', (e) => show(indexAt(e)));
-    hit.addEventListener('pointerleave', hide);
+    // Na dotyku: przesuwanie palcem w poziomie pokazuje dymek, pionowe przewija stronę; dymek nie znika po oderwaniu palca.
+    hit.style.touchAction = 'pan-y';
+    hit.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch') hide(); });
+    document.addEventListener('pointerdown', (e) => { if (!container.contains(e.target)) hide(); }, { passive: true });
   }
 
   root.SpotiCharts = { lineChart, fmtMinutes, bucketTitle, esc };
