@@ -184,12 +184,21 @@
   }
 
   /** Top N wykonawców/utworów/albumów. sortBy: 'ms' (czas) | 'plays' (odtworzenia). */
+  // Pamięć podręczna: ta sama tablica wierszy + rodzaj + sortowanie = ten sam wynik (strona pyta wielokrotnie).
+  const topCache = new WeakMap();
   function top(rows, kind, { sortBy = 'ms', limit = 10 } = {}) {
-    const list = [...aggregate(rows, kind).values()];
-    const primary = sortBy === 'plays' ? 'plays' : 'ms';
-    const secondary = primary === 'ms' ? 'plays' : 'ms';
-    list.sort((a, b) => b[primary] - a[primary] || b[secondary] - a[secondary] || a.name.localeCompare(b.name));
-    return limit ? list.slice(0, limit) : list;
+    let perRows = topCache.get(rows);
+    if (!perRows) { perRows = new Map(); topCache.set(rows, perRows); }
+    const ck = `${kind}|${sortBy}`;
+    let list = perRows.get(ck);
+    if (!list) {
+      list = [...aggregate(rows, kind).values()];
+      const primary = sortBy === 'plays' ? 'plays' : 'ms';
+      const secondary = primary === 'ms' ? 'plays' : 'ms';
+      list.sort((a, b) => b[primary] - a[primary] || b[secondary] - a[secondary] || a.name.localeCompare(b.name));
+      perRows.set(ck, list);
+    }
+    return limit ? list.slice(0, limit) : list.slice();
   }
 
   function summary(rows, from, to) {
@@ -209,7 +218,16 @@
   // ────────────────────────────────────────────────────────── OSIE CZASU
 
   /** Początek kubełka: dzień, tydzień (od poniedziałku) albo miesiąc — w czasie lokalnym. */
+  // Wiersze zwykle idą po kolei w czasie, więc zapamiętanie ostatniego kubełka oszczędza tysiące obiektów Date.
+  let lastBucket = { unit: null, lo: 0, hi: -1 };
   function bucketStart(ms, unit) {
+    const c = lastBucket;
+    if (c.unit === unit && ms >= c.lo && ms < c.hi) return c.lo;
+    const lo = bucketStartRaw(ms, unit);
+    lastBucket = { unit, lo, hi: nextBucket(lo, unit) };
+    return lo;
+  }
+  function bucketStartRaw(ms, unit) {
     const d = new Date(ms);
     if (unit === 'month') return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
     if (unit === 'week') {
