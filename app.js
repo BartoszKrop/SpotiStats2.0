@@ -51,7 +51,10 @@
     cloudMsg: null, // { text, warn } — komunikat o zapisie na GitHubie
     cloudBusy: false,
     showMore: false, // topki: 10 pozycji albo 25
-    kingsUnit: null, // null = automatycznie (tygodnie do roku, dłużej miesiące)
+    kingsUnit: null,
+    kingsHidden: new Set(), // wykonawcy wyłączeni w legendzie „Nr 1”
+    compare: [], // dodatkowi wykonawcy na wykresie w karcie wykonawcy
+    compareHidden: new Set(), // null = automatycznie (tygodnie do roku, dłużej miesiące)
     slot: 1,
     accounts: null, // z konta.json (null = jeszcze nie wczytane / brak sieci)
     liveCache: new Map(), // slot -> znormalizowane wiersze z automatu
@@ -172,6 +175,45 @@
       status.classList.add('import-status--error');
       status.textContent = `Błąd: ${err.message}`;
     }
+  }
+
+  // ─────────────────────────────────────────────────────── ANIMACJE
+  const reduceMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /** Podpis danych — animujemy wejście tylko gdy się zmienił (nie przy przerysowaniu po zdjęciach czy obrocie). */
+  const dataSig = () => `${state.slot}|${state.range}|${state.year}|${state.sortBy}|${state.meta && state.meta.demo ? 'demo' : ''}`;
+  function enter(el, sig) {
+    if (!el || el.dataset.sig === sig) return;
+    const first = el.dataset.sig == null;
+    el.dataset.sig = sig;
+    if (reduceMotion() || first && !state.rows.length) return;
+    el.classList.remove('is-entering');
+    void el.offsetWidth; // restart animacji
+    el.classList.add('is-entering');
+    // Zdjęcie się doczyta → lista przerysuje się — wtedy już bez ponownej animacji.
+    clearTimeout(el._enterTimer);
+    el._enterTimer = setTimeout(() => el.classList.remove('is-entering'), 900);
+  }
+  /** Liczby w kafelkach „dobiegają” do nowej wartości. */
+  const kpiPrev = new Map();
+  function countUp(root) {
+    root.querySelectorAll('[data-count]').forEach((el) => {
+      const to = Number(el.dataset.count);
+      const key = el.dataset.key;
+      const fromV = kpiPrev.has(key) ? kpiPrev.get(key) : to;
+      kpiPrev.set(key, to);
+      const suffix = el.dataset.suffix || '';
+      if (fromV === to || reduceMotion()) { el.textContent = nf.format(to) + suffix; return; }
+      const t0 = performance.now();
+      const dur = 550;
+      const step = (now) => {
+        if (!el.isConnected) return;
+        const p = Math.min(1, (now - t0) / dur);
+        const e = 1 - Math.pow(1 - p, 3);
+        el.textContent = nf.format(Math.round(fromV + (to - fromV) * e)) + suffix;
+        if (p < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
   }
 
   // ─────────────────────────────────────────────────────── FORMATOWANIE
@@ -421,15 +463,17 @@
   }
 
   function renderKpis(s) {
-    const kpi = (label, value, sub) => `<div class="kpi-card"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div>${sub ? `<div class="kpi-sub">${sub}</div>` : ''}</div>`;
-    document.getElementById('kpi-row').innerHTML = [
-      kpi('Minuty', nf.format(minutes(s.ms)), `${nf.format(Math.round(s.ms / 3_600_000))} godz.`),
-      kpi('Odtworzenia', nf.format(s.plays), 'co najmniej 30 s'),
-      kpi('Wykonawcy', nf.format(s.artists)),
-      kpi('Utwory', nf.format(s.tracks)),
-      kpi('Albumy', nf.format(s.albums)),
-      kpi('Na dzień', `${nf.format(Math.round(s.minutesPerDay))} min`)
+    const kpi = (label, n, sub, suffix = '') => `<div class="kpi-card"><div class="kpi-label">${label}</div><div class="kpi-value" data-count="${n}" data-key="${label}" data-suffix="${suffix}">${nf.format(kpiPrev.has(label) ? kpiPrev.get(label) : n)}${suffix}</div>${sub ? `<div class="kpi-sub">${sub}</div>` : ''}</div>`;
+    const row = document.getElementById('kpi-row');
+    row.innerHTML = [
+      kpi('Minuty', minutes(s.ms), `${nf.format(Math.round(s.ms / 3_600_000))} godz.`),
+      kpi('Odtworzenia', s.plays, 'co najmniej 30 s'),
+      kpi('Wykonawcy', s.artists),
+      kpi('Utwory', s.tracks),
+      kpi('Albumy', s.albums),
+      kpi('Na dzień', Math.round(s.minutesPerDay), '', ' min')
     ].join('');
+    countUp(row);
   }
 
   const valueOf = (it) => (state.sortBy === 'plays' ? `${nf.format(it.plays)} odtw.` : `${nf.format(minutes(it.ms))} min`);
@@ -489,6 +533,8 @@
     document.getElementById('top-artists-more').innerHTML = more(total('artist'));
     document.getElementById('top-tracks').innerHTML = trackList(tracks, 'track', previousRanks('track')) + more(total('track'));
     document.getElementById('top-albums').innerHTML = trackList(albums, 'album', previousRanks('album')) + more(total('album'));
+    const sig = `${dataSig()}|${state.showMore}`;
+    ['top-artists', 'top-tracks', 'top-albums'].forEach((id) => enter(document.getElementById(id), sig));
   }
 
   // ─────────────────────────────────────────────────────── REKORDY
@@ -532,14 +578,16 @@
       </button>
       <div class="rec-col"><h3 class="sub-title">Najwięcej tygodni na nr 1</h3><ol class="rec-list">${leaders}</ol></div>
       <div class="rec-col"><h3 class="sub-title">Największe tygodnie</h3><ol class="rec-list">${peaks}</ol></div>`;
+    enter(el, `${dataSig()}|${kind}`);
   }
 
   // ─────────────────────────────────────────────────────── KIEDY SŁUCHASZ
   const DAY_NAMES = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'];
   const DAY_FULL = ['w poniedziałki', 'we wtorki', 'w środy', 'w czwartki', 'w piątki', 'w soboty', 'w niedziele'];
+  let whenData = null;
   function bars(values, labels, peak, labelEvery = 1, fmt) {
     const max = Math.max(1, ...values);
-    return values.map((v, i) => `<div class="bar${i === peak ? ' is-peak' : ''}" title="${esc(fmt(i, v))}">
+    return values.map((v, i) => `<div class="bar${i === peak ? ' is-peak' : ''}" data-i="${i}" aria-label="${esc(fmt(i, v))}" style="--d:${i * 14}ms">
       <span class="bar__fill" style="height:${Math.max(v ? 3 : 0, (v / max) * 100)}%"></span>
       <span class="bar__label">${i % labelEvery === 0 ? labels[i] : ''}</span></div>`).join('');
   }
@@ -552,6 +600,12 @@
     document.getElementById('when-summary').textContent = r.total
       ? `Najwięcej słuchasz koło ${String(r.peakHour).padStart(2, '0')}:00, ${DAY_FULL[r.peakDay]}`
       : '';
+    const share = (v, all) => (all ? ` · ${Math.round((v / all) * 100)}%` : '');
+    const totalH = r.hours.reduce((a, b) => a + b, 0);
+    document.getElementById('when-hours-out').innerHTML = r.total ? `Szczyt: <b>${hh(r.peakHour)}</b> · ${nf.format(minutes(r.hours[r.peakHour]))} min${share(r.hours[r.peakHour], totalH)}` : '';
+    document.getElementById('when-days-out').innerHTML = r.total ? `Szczyt: <b>${DAY_NAMES[r.peakDay]}</b> · ${nf.format(minutes(r.days[r.peakDay]))} min${share(r.days[r.peakDay], totalH)}` : '';
+    whenData = { r, hh, totalH, share };
+    enter(document.getElementById('sec-when'), dataSig());
   }
 
   // ─────────────────────────────────────────────────────── OSTATNIO SŁUCHANE
@@ -575,6 +629,27 @@
         ${coverAvatar(`${r.track} ${r.artist}`, r.artist, r.album, 'avatar--cover')}
         <span class="track-text"><span class="track-name">${esc(r.track)}</span><span class="track-sub">${esc(r.artist)}</span></span>
         <span class="track-val track-val--when">${agoLabel(r.t)}</span></li>`).join('')}</ol>` : '<p class="no-data">Brak odsłuchów.</p>';
+    enter(el, `${state.slot}|${out.length ? out[0].t : 0}`);
+  }
+
+  // ─────────────────────────────────────────────────────── LEGENDY (wspólne)
+  /** Legenda z przyciskami: klik włącza/wyłącza serię, najechanie podświetla ją na wykresie. */
+  function legendHtml(items, { removable = false } = {}) {
+    return items.map((it) => `<button type="button" class="legend-item${it.on ? '' : ' is-off'}" data-name="${esc(it.name)}" aria-pressed="${it.on}" title="${it.on ? 'Ukryj' : 'Pokaż'} na wykresie">
+      <span class="swatch" style="${it.on ? `background:${it.color}` : ''}"></span>${it.rank ? `<span class="legend-rank">${it.rank}.</span> ` : ''}${esc(it.label || it.name)}${removable && it.removable ? '<span class="legend-x" data-remove title="Usuń z porównania" aria-label="Usuń">×</span>' : ''}</button>`).join('');
+  }
+  function wireLegendHighlight(legendId, chartId) {
+    const legend = document.getElementById(legendId);
+    const chart = () => document.getElementById(chartId)._chart;
+    const on = (e) => {
+      const b = e.target.closest('.legend-item:not(.is-off)');
+      const c = chart();
+      if (c) c.highlight(b ? b.dataset.name : null);
+    };
+    legend.addEventListener('pointerover', (e) => { if (e.pointerType !== 'touch') on(e); });
+    legend.addEventListener('focusin', on);
+    legend.addEventListener('pointerleave', () => { const c = chart(); if (c) c.highlight(null); });
+    legend.addEventListener('focusout', () => { const c = chart(); if (c) c.highlight(null); });
   }
 
   // ─────────────────────────────────────────────────────── NR 1 TYGODNIA
@@ -609,8 +684,8 @@
         <span class="kings-row__val">${k.weeks} ${plural(k.weeks)}</span></li>`).join('') || '<li class="no-data">—</li>';
 
     const colors = new Map(r.series.map((s, i) => [s.key, SERIES_COLORS[i]]));
-    document.getElementById('kings-legend').innerHTML = r.series.map((s) =>
-      `<span class="legend-item legend-item--static"><span class="swatch" style="background:${colors.get(s.key)}"></span>${esc(s.key)}</span>`).join('');
+    document.getElementById('kings-legend').innerHTML = legendHtml(r.series.map((s) => ({ name: s.key, color: colors.get(s.key), on: !state.kingsHidden.has(s.key) })));
+    enter(document.getElementById('kings-list'), dataSig());
     const chartEl = document.getElementById('kings-chart');
     if (r.buckets.length < 3) {
       chartEl.innerHTML = `<p class="no-data">Za krótki zakres na wykres — wybierz pół roku, rok albo cały czas.</p>`;
@@ -623,7 +698,7 @@
       rankOut: true,
       maxRank: KINGS_DEPTH + 1,
       height: 260,
-      series: r.series.map((s) => ({ name: s.key, color: colors.get(s.key), values: s.values })),
+      series: r.series.filter((s) => !state.kingsHidden.has(s.key)).map((s) => ({ name: s.key, color: colors.get(s.key), values: s.values })),
       tipExtra: (i) => (r.leaders[i] ? `<div class="chart-tip__lead">👑 ${esc(r.leaders[i].name)} · ${nf.format(minutes(r.leaders[i].ms))} min</div>` : '')
     });
   }
@@ -656,7 +731,7 @@
     legend.innerHTML = items.map((it, i) => {
       const color = state.visible.get(it.key);
       const name = kind === 'track' ? `${it.name} — ${it.artist}` : it.name;
-      return `<button type="button" class="legend-item${color ? '' : ' is-off'}" data-key="${esc(it.key)}" aria-pressed="${Boolean(color)}">
+      return `<button type="button" class="legend-item${color ? '' : ' is-off'}" data-key="${esc(it.key)}" data-name="${esc(name)}" aria-pressed="${Boolean(color)}" title="${color ? 'Ukryj' : 'Pokaż'} na wykresie">
         <span class="swatch" style="${color ? `background:${color}` : ''}"></span><span class="legend-rank">${i + 1}.</span> ${esc(name)}</button>`;
     }).join('');
 
@@ -694,9 +769,15 @@
       return;
     }
 
+    // Porównanie: główny wykonawca + do 4 innych (bez duplikatów i bez nieistniejących).
+    state.compare = state.compare.filter((n) => n !== state.artist);
+    const compared = state.compare.map((n) => ({ name: n, d: A.artistDetails(state.rows, n) })).filter((c) => c.d.first);
     let from, to;
     if (state.artistSpan === 'range') ({ from, to } = { from: rangeFrom, to: rangeTo });
-    else { from = A.bucketStart(details.first, 'day'); to = A.bucketStart(state.rows[state.rows.length - 1].t, 'day') + 86_400_000; }
+    else {
+      from = A.bucketStart(Math.min(details.first, ...compared.map((c) => c.d.first)), 'day');
+      to = A.bucketStart(state.rows[state.rows.length - 1].t, 'day') + 86_400_000;
+    }
     const unit = pickUnit(state.artistUnit || 'week', from, to);
     syncSeg('artist-unit', 'unit', unit, allowedUnits(from, to));
 
@@ -714,28 +795,128 @@
           <div><dt>Ostatni odsłuch</dt><dd>${fmtDate(details.last)}</dd></div>
         </dl>
       </div>`;
-    body.innerHTML = `
-      <div id="artist-chart"></div>
-      <h4 class="sub-title">Najczęściej słuchane utwory (wybrany zakres)</h4>
-      <div id="artist-tracks">${trackList(tops, 'track')}</div>`;
+    // Stała struktura (wykres nie jest tworzony od nowa — dzięki temu animuje się tylko przy zmianie danych).
+    if (!document.getElementById('artist-chart')) {
+      body.innerHTML = `
+        <div id="artist-compare" class="compare"></div>
+        <div id="artist-chart"></div>
+        <h4 class="sub-title">Najczęściej słuchane utwory (wybrany zakres)</h4>
+        <div id="artist-tracks"></div>`;
+    }
+    document.getElementById('artist-tracks').innerHTML = trackList(tops, 'track');
+    enter(document.getElementById('artist-tracks'), `${state.artist}|${dataSig()}`);
 
-    const own = state.rows.filter((r) => r.artist === state.artist);
-    const tl = A.timeline(own, from, to, unit, [{ key: state.artist, match: () => true }]);
-    C.lineChart(document.getElementById('artist-chart'), {
+    const palette = [SPOTIFY_GREEN, ...SERIES_COLORS.filter((c) => c !== '#0aac23')];
+    const all = [{ name: state.artist, color: palette[0], main: true }, ...compared.map((c, i) => ({ name: c.name, color: palette[i + 1] }))];
+    const quick = A.top(sliceOf(state.rows, rangeFrom, rangeTo), 'artist', { sortBy: state.sortBy, limit: 8 })
+      .map((it) => it.name).filter((n) => !all.some((a) => a.name === n)).slice(0, 3);
+    const canAdd = compared.length < 4;
+    document.getElementById('artist-compare').innerHTML = `
+      ${compared.length ? `<div class="legend" aria-label="Legenda — kliknij, by pokazać lub ukryć">${legendHtml(all.map((a) => ({ ...a, on: !state.compareHidden.has(a.name), removable: !a.main })), { removable: true })}</div>` : ''}
+      ${canAdd ? `<div class="compare-add"><span class="compare-label">Porównaj z</span>
+        ${quick.map((n) => `<button type="button" class="chip chip--sm" data-add="${esc(n)}">+ ${esc(n)}</button>`).join('')}
+        <input id="compare-input" class="field-input field-input--sm" list="artist-list" placeholder="inny wykonawca…" autocomplete="off" spellcheck="false" aria-label="Dodaj wykonawcę do porównania" /></div>` : ''}`;
+
+    const shown = all.filter((a) => !state.compareHidden.has(a.name));
+    const names = new Set(shown.map((a) => a.name));
+    const own = state.rows.filter((r) => names.has(r.artist));
+    const tl = A.timeline(own, from, to, unit, shown.map((a) => ({ key: a.name, match: (r) => r.artist === a.name })));
+    const chartEl = document.getElementById('artist-chart');
+    if (!shown.length) { chartEl.innerHTML = '<p class="no-data">Włącz kogoś w legendzie.</p>'; chartEl._chartPrev = null; return; }
+    C.lineChart(chartEl, {
       buckets: tl.buckets,
       unit,
       area: true,
-      series: [{ name: state.artist, color: SPOTIFY_GREEN, values: tl.series[0].values }]
+      series: shown.map((a, i) => ({ name: a.name, color: a.color, values: tl.series[i].values }))
     });
   }
 
   function selectArtist(name, open) {
+    if (open && name !== state.artist) { state.compare = []; state.compareHidden.clear(); }
     state.artist = name;
     savePrefs();
     if (open) openSheet();
     const { from, to } = currentBounds();
     renderArtist(from, to);
     document.getElementById('sheet-title').textContent = state.artist;
+  }
+
+  // ─────────────────────────────────────────────────────── INTERAKCJE: legendy, porównanie, słupki
+  /** Przeliczenie z krótkim przygaszeniem treści — zmiana okresu/sortowania wygląda płynnie, nie „skacze”. */
+  function switchRender() {
+    const box = document.getElementById('state-data');
+    if (reduceMotion()) { render(); return; }
+    box.classList.add('is-switching');
+    requestAnimationFrame(() => setTimeout(() => {
+      render();
+      requestAnimationFrame(() => box.classList.remove('is-switching'));
+    }, 60));
+  }
+  function rerenderKings() {
+    const { from, to } = currentBounds();
+    renderKings(sliceOf(state.rows, from, to), from, to);
+  }
+  function rerenderArtist() {
+    const { from, to } = currentBounds();
+    renderArtist(from, to);
+  }
+  function addCompare(raw) {
+    const v = String(raw || '').trim();
+    if (!v) return;
+    const match = A.allArtists(state.rows).find((a) => a.toLowerCase() === v.toLowerCase());
+    if (!match || match === state.artist || state.compare.includes(match) || state.compare.length >= 4) return;
+    state.compare.push(match);
+    state.compareHidden.delete(match);
+    rerenderArtist();
+  }
+  function wireInteractive() {
+    wireLegendHighlight('top-legend', 'top-chart');
+    wireLegendHighlight('kings-legend', 'kings-chart');
+    wireLegendHighlight('artist-body', 'artist-chart');
+
+    document.getElementById('kings-legend').addEventListener('click', (e) => {
+      const b = e.target.closest('.legend-item');
+      if (!b) return;
+      const name = b.dataset.name;
+      if (state.kingsHidden.has(name)) state.kingsHidden.delete(name); else state.kingsHidden.add(name);
+      rerenderKings();
+    });
+
+    const body = document.getElementById('artist-body');
+    body.addEventListener('click', (e) => {
+      const add = e.target.closest('[data-add]');
+      if (add) { addCompare(add.dataset.add); return; }
+      const b = e.target.closest('.legend-item');
+      if (!b) return;
+      const name = b.dataset.name;
+      if (e.target.closest('[data-remove]')) {
+        state.compare = state.compare.filter((n) => n !== name);
+        state.compareHidden.delete(name);
+      } else if (state.compareHidden.has(name)) state.compareHidden.delete(name);
+      else state.compareHidden.add(name);
+      rerenderArtist();
+    });
+    body.addEventListener('change', (e) => { if (e.target.id === 'compare-input') addCompare(e.target.value); });
+    body.addEventListener('keydown', (e) => { if (e.target.id === 'compare-input' && e.key === 'Enter') addCompare(e.target.value); });
+
+    // Słupki „Kiedy słuchasz”: najechanie / dotknięcie pokazuje wartość pod wykresem.
+    const pick = (box, out, kind) => (e) => {
+      const bar = e.target.closest('.bar');
+      if (!bar || !whenData) return;
+      const i = Number(bar.dataset.i);
+      const { r, hh, totalH, share } = whenData;
+      box.querySelectorAll('.bar.is-sel').forEach((b) => b.classList.remove('is-sel'));
+      bar.classList.add('is-sel');
+      const v = kind === 'h' ? r.hours[i] : r.days[i];
+      const label = kind === 'h' ? hh(i) : DAY_NAMES[i];
+      out.innerHTML = `<b>${label}</b> · ${nf.format(minutes(v))} min${share(v, totalH)}`;
+    };
+    for (const [id, kind] of [['when-hours', 'h'], ['when-days', 'd']]) {
+      const box = document.getElementById(id);
+      const out = document.getElementById(`${id}-out`);
+      box.addEventListener('pointerover', pick(box, out, kind));
+      box.addEventListener('click', pick(box, out, kind));
+    }
   }
 
   // ─────────────────────────────────────────────────────── MENU „⋯”
@@ -876,18 +1057,19 @@
       savePrefs();
       // Najpierw podświetl wybrany okres (natychmiastowa reakcja), potem przelicz resztę.
       document.querySelectorAll('#range-pills .chip').forEach((p) => p.classList.toggle('is-active', p.dataset.range === state.range));
-      requestAnimationFrame(() => setTimeout(render, 0));
+      switchRender();
     });
     const yearSelect = document.getElementById('year-select');
-    yearSelect.addEventListener('change', () => { state.range = 'year'; state.year = Number(yearSelect.value); savePrefs(); render(); });
-    yearSelect.addEventListener('click', () => { if (state.range !== 'year') { state.range = 'year'; state.year = Number(yearSelect.value); savePrefs(); render(); } });
+    yearSelect.addEventListener('change', () => { state.range = 'year'; state.year = Number(yearSelect.value); savePrefs(); switchRender(); });
+    yearSelect.addEventListener('click', () => { if (state.range !== 'year') { state.range = 'year'; state.year = Number(yearSelect.value); savePrefs(); switchRender(); } });
 
     document.querySelectorAll('.sort-group').forEach((g) => g.addEventListener('click', (e) => {
       const pill = e.target.closest('button[data-sort]');
       if (!pill || pill.dataset.sort === state.sortBy) return;
       state.sortBy = pill.dataset.sort;
       savePrefs();
-      render();
+      document.querySelectorAll('.sort-group button').forEach((p) => p.classList.toggle('is-active', p.dataset.sort === state.sortBy));
+      switchRender();
     }));
     document.getElementById('ta-tabs').addEventListener('click', (e) => {
       const b = e.target.closest('button[data-tab]');
@@ -1015,6 +1197,7 @@
     });
     wireMenu();
     wireSheet();
+    wireInteractive();
   }
 
   // ─────────────────────────────────────────────────────── KONTA I AUTOMAT (gałąź „dane”)

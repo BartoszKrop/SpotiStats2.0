@@ -128,9 +128,19 @@
       t.textContent = axisLabel(buckets[i], unit, multiYear);
     }
 
+    // Animacja wejścia tylko dla serii, które są nowe albo zmieniły dane (nie przy każdym przerysowaniu,
+    // np. po dociągnięciu zdjęć czy obrocie telefonu).
+    const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const axisSig = `${unit}|${buckets[0]}|${n}|${rank ? maxRank : 'v'}`;
+    const prev = container._chartPrev || { axis: '', sigs: new Map() };
+    const sigs = new Map(series.map((s) => [s.name, s.values.join(',')]));
+    container._chartPrev = { axis: axisSig, sigs };
+    const isNew = (s) => !reduce && opts.animate !== false && (prev.axis !== axisSig || prev.sigs.get(s.name) !== sigs.get(s.name));
+
     // Linie
     const lines = el('g', { class: 'chart-lines' }, svg);
     for (const s of series) {
+      const g = el('g', { class: `chart-series${isNew(s) ? ' is-entering' : ''}`, 'data-series': s.name }, lines);
       // null przerywa linię (np. wykonawca wypadł z top 10 w danym tygodniu)
       let d = '';
       let pen = false;
@@ -153,13 +163,17 @@
       }
       if (rank && n <= 24) {
         // Pojedyncze okresy bez sąsiadów byłyby niewidoczne — kropki dla każdego punktu w topce.
-        s.values.forEach((v, i) => { if (isIn(v)) el('circle', { cx: x(i), cy: y(v), r: v === 1 ? 4 : 3, fill: s.color }, lines); });
+        s.values.forEach((v, i) => { if (isIn(v)) el('circle', { cx: x(i), cy: y(v), r: v === 1 ? 4 : 3, fill: s.color, class: 'chart-point' }, g); });
       }
       if (opts.area && series.length === 1) {
-        el('path', { d: `${d}L${x(n - 1).toFixed(1)},${y(0)}L${x(0).toFixed(1)},${y(0)}Z`, fill: s.color, 'fill-opacity': 0.14, stroke: 'none' }, lines);
+        const fillId = `g${Math.random().toString(36).slice(2, 8)}`;
+        const grad = el('linearGradient', { id: fillId, x1: 0, y1: 0, x2: 0, y2: 1 }, el('defs', {}, g));
+        el('stop', { offset: '0%', 'stop-color': s.color, 'stop-opacity': 0.32 }, grad);
+        el('stop', { offset: '100%', 'stop-color': s.color, 'stop-opacity': 0.02 }, grad);
+        el('path', { d: `${d}L${x(n - 1).toFixed(1)},${y(0)}L${x(0).toFixed(1)},${y(0)}Z`, fill: `url(#${fillId})`, stroke: 'none', class: 'chart-area' }, g);
       }
-      el('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'data-series': s.name }, lines);
-      if (n === 1) el('circle', { cx: x(0), cy: y(s.values[0]), r: 4, fill: s.color }, lines);
+      el('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 2.25, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', class: 'chart-line', pathLength: 1 }, g);
+      if (n === 1) el('circle', { cx: x(0), cy: y(s.values[0]), r: 4, fill: s.color }, g);
     }
 
     // Warstwa najechania: pionowa linia + kropki + dymek
@@ -215,7 +229,17 @@
     // Na dotyku: przesuwanie palcem w poziomie pokazuje dymek, pionowe przewija stronę; dymek nie znika po oderwaniu palca.
     hit.style.touchAction = 'pan-y';
     hit.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch') hide(); });
-    document.addEventListener('pointerdown', (e) => { if (!container.contains(e.target)) hide(); }, { passive: true });
+    if (container._outside) document.removeEventListener('pointerdown', container._outside);
+    container._outside = (e) => { if (!container.contains(e.target)) hide(); };
+    document.addEventListener('pointerdown', container._outside, { passive: true });
+
+    /** Podświetla jedną serię (reszta przygasa); null = wszystkie normalnie. */
+    function highlight(name) {
+      svg.classList.toggle('has-focus', name != null && series.some((s) => s.name === name));
+      lines.querySelectorAll('.chart-series').forEach((g) => g.classList.toggle('is-focus', g.getAttribute('data-series') === name));
+    }
+    container._chart = { highlight };
+    return container._chart;
   }
 
   root.SpotiCharts = { lineChart, fmtMinutes, bucketTitle, esc };

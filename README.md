@@ -15,6 +15,7 @@ Statystyki słuchania Spotify w stylu stats.fm, liczone z **pełnego eksportu hi
 - **Wykonawca w czasie** — wykres dowolnego wykonawcy (wyszukiwarka albo klik w topce), cały czas lub wybrany zakres, do tego jego najczęściej słuchane utwory.
 - **Karta wykonawcy** — klik w dowolnego wykonawcę (topka, utwór, rekord) otwiera jego kartę na wierzchu; gest/przycisk „wstecz” ją zamyka.
 - Na telefonie: okresy w dolnym pasku pod kciukiem, top wykonawcy jako przesuwana karuzela, utwory/albumy w zakładkach, opcje konta (zapis na GitHubie, nowszy eksport, automat) w menu „⋯”.
+- **Interaktywne wykresy** — na każdym wykresie klik w nazwę w legendzie włącza/wyłącza serię, a najechanie (lub fokus) wyróżnia ją i przygasza resztę. W karcie wykonawcy można dodać do 4 innych wykonawców do porównania. Słupki „Kiedy słuchasz” po dotknięciu pokazują minuty i udział.
 - Podcasty, audiobooki i wpisy bez wykonawcy są **pomijane**. Duplikaty z nakładających się plików są usuwane.
 - „Odtworzenie” liczy się od 30 s słuchania (jak w stats.fm); minuty liczą się zawsze.
 
