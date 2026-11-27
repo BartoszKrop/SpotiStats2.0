@@ -4,7 +4,7 @@
    "slot": 1,
    "name": null,
    "connectedAt": "2026-11-26T18:30:14.414Z",
-   "lastSync": "2026-11-27T15:58:53.802Z",
+   "lastSync": "2026-11-27T16:24:13.377Z",
    "lastPlayedAt": "2026-11-27T08:04:37.898Z",
    "error": null,
    "files": [
@@ -28,5 +28,5 @@
    "name": null
   }
  ],
- "updatedAt": "2026-11-27T15:58:53.866Z"
+ "updatedAt": "2026-11-27T16:24:13.444Z"
 }
