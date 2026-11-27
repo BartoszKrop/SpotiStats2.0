@@ -580,7 +580,7 @@ body.sheet-open { overflow: hidden; }
   .menu { box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.55), 0 16px 40px rgba(0, 0, 0, 0.6); }
   .sheet__body .artist-head { flex-direction: column; align-items: flex-start; }
   .sheet__body .artist-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem 1rem; }
-  .sheet__body .card-controls .field-input { order: 3; }
+  .sheet__body .card-controls > .combo { order: 3; }
 }
 @media (max-width: 900px) { .layout { grid-template-rows: auto 1fr; min-height: 100dvh; } }
 
@@ -693,3 +693,41 @@ body.who-open { overflow: hidden; }
 .account-switch { margin-left: auto; font-size: 0.75rem; font-weight: 700; color: var(--text-2); border: 1px solid #535353; border-radius: 999px; padding: 0.2rem 0.6rem; }
 .account:hover .account-switch { color: var(--text); border-color: #fff; }
 @media (max-width: 900px) { .account-switch { display: none; } }
+
+/* ══ v26: „Na szczycie”, bez przypadkowego zoomu ══ */
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+.chart-svg, .bars { -webkit-user-select: none; user-select: none; }
+@media (max-width: 900px) {
+  /* iPhone przybliża stronę przy wejściu w pole z tekstem mniejszym niż 16 px */
+  input, select, textarea, .field-input, .field-input--sm { font-size: 16px !important; }
+  .toolbar .chip--select select { font-size: 16px !important; transform: scale(0.82); transform-origin: center; margin: -0.2rem -0.6rem; }
+}
+.rec-heroes { display: flex; flex-direction: column; gap: 0.75rem; }
+.rec-hero__label { display: inline-flex; align-items: center; gap: 0.35rem; }
+.rec-hero--now { background: linear-gradient(135deg, #3b2a6b, #1f1a3a); }
+.rec-hero--now .rec-hero__label { color: #d6c8ff; }
+
+/* Wybór wykonawcy: rozwijana lista z wyszukiwaniem */
+.combo { position: relative; display: inline-flex; align-items: center; min-width: 0; }
+.combo .field-input { padding-right: 2.2rem; cursor: pointer; }
+.combo .field-input:focus { cursor: text; }
+.combo-caret { position: absolute; right: 0.8rem; width: 1rem; height: 1rem; color: var(--text-2); cursor: pointer; }
+.combo--sm { flex: 1 1 160px; }
+.combo--sm .field-input { width: 100%; padding-right: 0.85rem; }
+.combo-list {
+  position: absolute; z-index: 45; top: calc(100% + 6px); left: 0; width: max(100%, 280px); max-height: min(340px, 50vh); overflow-y: auto;
+  overscroll-behavior: contain; list-style: none; background: #282828; border-radius: 10px; padding: 0.35rem; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  animation: pop 0.14s ease-out;
+}
+.combo-opt { display: flex; align-items: center; gap: 0.65rem; padding: 0.45rem 0.55rem; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+.combo-opt:hover, .combo-opt.is-active { background: #3e3e3e; }
+.combo-opt.is-current .combo-name { color: var(--green); }
+.combo-name { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.combo-val { font-size: 0.75rem; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.combo-empty { padding: 0.7rem; font-size: 0.85rem; color: var(--text-2); }
+.avatar--xs { width: 28px; height: 28px; font-size: 0.65rem; }
+@media (max-width: 900px) {
+  .card-controls > .combo { width: 100%; }
+  .card-controls > .combo .field-input { width: 100%; }
+  .combo-list { width: 100%; }
+}

@@ -52,8 +52,7 @@
     cloudMsg: null, // { text, warn } — komunikat o zapisie na GitHubie
     cloudBusy: false,
     showMore: false, // topki: 10 pozycji albo 25
-    kingsUnit: null,
-    kingsHidden: new Set(), // wykonawcy wyłączeni w legendzie „Nr 1”
+    topMode: 'ms', // Ranking w czasie: 'ms' = minuty, 'rank' = pozycja w rankingu
     compare: [], // dodatkowi wykonawcy na wykresie w karcie wykonawcy
     compareHidden: new Set(), // null = automatycznie (tygodnie do roku, dłużej miesiące)
     slot: 1,
@@ -68,7 +67,7 @@
   function loadPrefs() {
     try {
       const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
-      for (const k of ['range', 'year', 'sortBy', 'topKind', 'artist', 'slot']) if (p[k] != null) state[k] = p[k];
+      for (const k of ['range', 'year', 'sortBy', 'topKind', 'artist', 'slot', 'topMode']) if (p[k] != null) state[k] = p[k];
       const prof = Number(localStorage.getItem(PROFILE_KEY));
       state.profile = prof >= 1 && prof <= 5 ? prof : null;
       const q = Number(new URLSearchParams(location.search).get('konto'));
@@ -78,8 +77,8 @@
   }
   function savePrefs() {
     try {
-      const { range, year, sortBy, topKind, artist, artistSpan, slot } = state;
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ range, year, sortBy, topKind, artist, artistSpan, slot }));
+      const { range, year, sortBy, topKind, artist, artistSpan, slot, topMode } = state;
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ range, year, sortBy, topKind, artist, artistSpan, slot, topMode }));
     } catch { /* ignoruj */ }
   }
 
@@ -408,7 +407,6 @@
     who.classList.add('is-leaving');
     setTimeout(() => { who.classList.add('hidden'); who.classList.remove('is-leaving'); document.body.classList.remove('who-open'); }, reduceMotion() ? 0 : 220);
     state.compare = [];
-    state.kingsHidden.clear();
     setCloudMsg('');
     if (slot !== state.slot || !state.rows.length) loadSlot(slot); else render();
   }
@@ -496,7 +494,6 @@
     renderKpis(sum);
     renderTops(slice);
     renderRecent();
-    renderKings(slice, from, to);
     renderWhen(slice);
     renderRecords(slice, from, to);
     renderTopChart(slice, from, to);
@@ -615,6 +612,10 @@
     const sub = (it) => (kind === 'track' ? `<span class="track-sub">${esc(it.artist)}</span>` : '');
     const noun = kind === 'artist' ? 'wykonawca' : 'utwór';
     const hero = r.longest;
+    const now = r.current;
+    const lastWeek = A.bucketStart(Math.min(to - 1, state.rows[state.rows.length - 1].t), 'week');
+    const nowLabel = now && now.week === lastWeek ? `Nr 1 w tym tygodniu` : 'Ostatni nr 1';
+    const nowSub = now ? `${now.run > 1 ? `${plWeeks(now.run)} z rzędu · ` : ''}${state.sortBy === 'plays' ? `${nf.format(now.plays)} odtw.` : `${nf.format(minutes(now.ms))} min`} w tygodniu od ${fmtDate(now.week)}` : '';
     const leaders = r.leaders.map((l, i) => `<li class="rec-row" data-artist="${esc(l.artist)}" tabindex="0" role="button">
         <span class="track-rank">${i + 1}</span>
         <span class="track-text"><span class="track-name">${esc(l.name)}</span>${sub(l)}</span>
@@ -624,12 +625,20 @@
         <span class="track-text"><span class="track-name">${esc(p.name)}</span><span class="track-sub">${kind === 'track' ? `${esc(p.artist)} · ` : ''}${fmtWeek(p.week)}</span></span>
         <span class="rec-val"><b>${state.sortBy === 'plays' ? `${nf.format(p.plays)} odtw.` : `${nf.format(minutes(p.ms))} min`}</b><small>${state.sortBy === 'plays' ? `${nf.format(minutes(p.ms))} min` : `${nf.format(p.plays)} odtw.`}</small></span></li>`).join('');
     el.innerHTML = `
+      <div class="rec-heroes">
+      ${now ? `<button type="button" class="rec-hero rec-hero--now" data-artist="${esc(now.artist)}">
+        <span class="rec-hero__label"><svg class="ico ico--sm" aria-hidden="true"><use href="#i-crown"/></svg> ${nowLabel}</span>
+        <span class="rec-hero__main">${av(now, 'avatar--lg')}<span><span class="rec-hero__name">${esc(now.name)}</span>
+          ${kind === 'track' ? `<span class="rec-hero__sub">${esc(now.artist)}</span>` : ''}
+          <span class="rec-hero__sub">${nowSub}</span></span></span>
+      </button>` : ''}
       <button type="button" class="rec-hero" data-artist="${esc(hero.artist)}">
-        <span class="rec-hero__label">Najdłuższa seria na nr 1 (${noun})</span>
+        <span class="rec-hero__label"><svg class="ico ico--sm" aria-hidden="true"><use href="#i-trophy"/></svg> Najdłuższa seria na nr 1 (${noun})</span>
         <span class="rec-hero__main">${av(hero, 'avatar--lg')}<span><span class="rec-hero__name">${esc(hero.name)}</span>
           <span class="rec-hero__val">${plWeeks(hero.weeks)} z rzędu</span>
           <span class="rec-hero__sub">od ${fmtDate(hero.from)}</span></span></span>
       </button>
+      </div>
       <div class="rec-col"><h3 class="sub-title">Najwięcej tygodni na nr 1</h3><ol class="rec-list">${leaders}</ol></div>
       <div class="rec-col"><h3 class="sub-title">Największe tygodnie</h3><ol class="rec-list">${peaks}</ol></div>`;
     enter(el, `${dataSig()}|${kind}`);
@@ -706,57 +715,6 @@
     legend.addEventListener('focusout', () => { const c = chart(); if (c) c.highlight(null); });
   }
 
-  // ─────────────────────────────────────────────────────── NR 1 TYGODNIA
-  const KINGS_DEPTH = 5;
-  function renderKings(slice, from, to) {
-    const span = (to - from) / 86_400_000;
-    const allowed = { week: span >= 14, month: span >= 60 };
-    const auto = allowed.month ? 'month' : 'week';
-    const unit = state.kingsUnit && allowed[state.kingsUnit] ? state.kingsUnit : auto;
-    syncSeg('kings-unit', 'unit', unit, allowed);
-    const r = A.rankTimeline(slice, from, to, unit, { depth: KINGS_DEPTH, limit: span > 730 ? 4 : 5, sortBy: state.sortBy, outside: true });
-    const unitWord = unit === 'month' ? ['miesiąc', 'miesiące', 'miesięcy', 'w tym miesiącu'] : ['tydzień', 'tygodnie', 'tygodni', 'w tym tygodniu'];
-    const plural = (n) => (n === 1 ? unitWord[0] : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? unitWord[1] : unitWord[2]);
-
-    // Aktualny nr 1 i jego seria z rzędu
-    const lastIdx = r.leaders.map((l, i) => (l ? i : -1)).filter((i) => i >= 0).pop();
-    const now = lastIdx != null ? r.leaders[lastIdx] : null;
-    let streak = 0;
-    if (now) for (let i = lastIdx; i >= 0 && r.leaders[i] && r.leaders[i].name === now.name; i--) streak++;
-    document.getElementById('kings-now').innerHTML = now
-      ? `<button type="button" class="kings-now__card" data-artist="${esc(now.name)}">${artistAvatar(now.name, 'avatar--lg')}
-          <span><span class="kicker">Nr 1 ${lastIdx === r.leaders.length - 1 ? unitWord[3] : 'ostatnio'}</span>
-          <span class="kings-now__name">${esc(now.name)}</span>
-          <span class="kings-now__sub">${streak > 1 ? `${streak} ${plural(streak)} z rzędu · ` : ''}${nf.format(minutes(now.ms))} min</span></span></button>`
-      : '<p class="no-data">Brak odsłuchów.</p>';
-
-    const maxW = Math.max(1, ...r.kings.map((k) => k.weeks));
-    document.getElementById('kings-list').innerHTML = r.kings.slice(0, 8).map((k) =>
-      `<li class="kings-row" data-artist="${esc(k.name)}" tabindex="0" role="button">
-        ${artistAvatar(k.name, 'avatar--sm')}<span class="kings-row__name">${esc(k.name)}</span>
-        <span class="kings-row__bar"><span style="width:${(k.weeks / maxW) * 100}%"></span></span>
-        <span class="kings-row__val">${k.weeks} ${plural(k.weeks)}</span></li>`).join('') || '<li class="no-data">—</li>';
-
-    const colors = new Map(r.series.map((s, i) => [s.key, SERIES_COLORS[i]]));
-    document.getElementById('kings-legend').innerHTML = legendHtml(r.series.map((s) => ({ name: s.key, color: colors.get(s.key), on: !state.kingsHidden.has(s.key) })));
-    enter(document.getElementById('kings-list'), dataSig());
-    const chartEl = document.getElementById('kings-chart');
-    if (r.buckets.length < 3) {
-      chartEl.innerHTML = `<p class="no-data">Za krótki zakres na wykres — wybierz pół roku, rok albo cały czas.</p>`;
-      return;
-    }
-    C.lineChart(chartEl, {
-      buckets: r.buckets,
-      unit,
-      rank: true,
-      rankOut: true,
-      maxRank: KINGS_DEPTH + 1,
-      height: 260,
-      series: r.series.filter((s) => !state.kingsHidden.has(s.key)).map((s) => ({ name: s.key, color: colors.get(s.key), values: s.values })),
-      tipExtra: (i) => (r.leaders[i] ? `<div class="chart-tip__lead">👑 ${esc(r.leaders[i].name)} · ${nf.format(minutes(r.leaders[i].ms))} min</div>` : '')
-    });
-  }
-
   /** Kolory trzymają się danej pozycji (nie miejsca w rankingu), dopóki jest widoczna. */
   function ensureVisible(items, signature) {
     if (state.visibleFor === signature) {
@@ -774,7 +732,8 @@
 
   function renderTopChart(slice, from, to) {
     const kind = state.topKind;
-    const unit = pickUnit(state.topUnit, from, to);
+    // Pozycje tydzień po tygodniu przez pół roku i dłużej to „spaghetti” — domyślnie miesiące.
+    const unit = pickUnit(state.topUnit || (state.topMode === 'rank' && (to - from) / 86_400_000 > 120 ? 'month' : null), from, to);
     syncSeg('top-kind', 'kind', kind);
     syncSeg('top-unit', 'unit', unit, allowedUnits(from, to));
 
@@ -790,13 +749,39 @@
     }).join('');
 
     const shown = items.filter((it) => state.visible.has(it.key));
-    const keyOf = kind === 'track' ? A.trackKey : (r) => r.artist;
-    const tl = A.timeline(slice, from, to, unit, shown.map((it) => ({ key: it.key, match: (r) => keyOf(r) === it.key })));
-    C.lineChart(document.getElementById('top-chart'), {
-      buckets: tl.buckets,
-      unit,
-      series: shown.map((it, i) => ({ name: kind === 'track' ? `${it.name} — ${it.artist}` : it.name, color: state.visible.get(it.key), values: tl.series[i].values }))
-    });
+    const label = (it) => (kind === 'track' ? `${it.name} — ${it.artist}` : it.name);
+    const mode = state.topMode;
+    syncSeg('top-mode', 'mode', mode);
+    const DEPTH = 10;
+    document.getElementById('top-hint').textContent = mode === 'rank'
+      ? `Miejsce w rankingu w każdym okresie (#1 na górze, „dalej” = poza top ${DEPTH}). Kliknij nazwę, żeby ją pokazać lub ukryć, najedź, żeby wyróżnić.`
+      : 'Minuty słuchania w każdym okresie. Kliknij nazwę, żeby ją pokazać lub ukryć (max 8 naraz), najedź, żeby wyróżnić.';
+    if (mode === 'rank') {
+      const rk = A.rankSeries(slice, from, to, unit, kind, shown.map((it) => it.key), { depth: DEPTH, sortBy: state.sortBy });
+      C.lineChart(document.getElementById('top-chart'), {
+        buckets: rk.buckets,
+        unit,
+        rank: true,
+        rankOut: true,
+        maxRank: DEPTH + 1,
+        height: 320,
+        series: shown.map((it, i) => ({ name: label(it), color: state.visible.get(it.key), values: rk.series[i].values })),
+        tipExtra: (i) => {
+          const l = rk.leaders[i];
+          if (!l) return '';
+          const v = state.sortBy === 'plays' ? `${nf.format(l.plays)} odtw.` : `${nf.format(minutes(l.ms))} min`;
+          return `<div class="chart-tip__lead">👑 ${esc(kind === 'track' ? `${l.name} — ${l.artist}` : l.name)} · ${v}</div>`;
+        }
+      });
+    } else {
+      const keyOf = kind === 'track' ? A.trackKey : (r) => r.artist;
+      const tl = A.timeline(slice, from, to, unit, shown.map((it) => ({ key: it.key, match: (r) => keyOf(r) === it.key })));
+      C.lineChart(document.getElementById('top-chart'), {
+        buckets: tl.buckets,
+        unit,
+        series: shown.map((it, i) => ({ name: label(it), color: state.visible.get(it.key), values: tl.series[i].values }))
+      });
+    }
     if (!items.length) document.getElementById('top-chart').innerHTML = '<p class="no-data">Brak odsłuchów w tym zakresie.</p>';
     else if (!shown.length) document.getElementById('top-chart').innerHTML = '<p class="no-data">Zaznacz kogoś w legendzie.</p>';
   }
@@ -869,7 +854,7 @@
       ${compared.length ? `<div class="legend" aria-label="Legenda — kliknij, by pokazać lub ukryć">${legendHtml(all.map((a) => ({ ...a, on: !state.compareHidden.has(a.name), removable: !a.main })), { removable: true })}</div>` : ''}
       ${canAdd ? `<div class="compare-add"><span class="compare-label">Porównaj z</span>
         ${quick.map((n) => `<button type="button" class="chip chip--sm" data-add="${esc(n)}">+ ${esc(n)}</button>`).join('')}
-        <input id="compare-input" class="field-input field-input--sm" list="artist-list" placeholder="inny wykonawca…" autocomplete="off" spellcheck="false" aria-label="Dodaj wykonawcę do porównania" /></div>` : ''}`;
+        <div class="combo combo--sm"><input id="compare-input" class="field-input field-input--sm" data-combo="compare" placeholder="inny wykonawca…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="Dodaj wykonawcę do porównania" /></div></div>` : ''}`;
 
     const shown = all.filter((a) => !state.compareHidden.has(a.name));
     const names = new Set(shown.map((a) => a.name));
@@ -906,10 +891,6 @@
       requestAnimationFrame(() => box.classList.remove('is-switching'));
     }, 60));
   }
-  function rerenderKings() {
-    const { from, to } = currentBounds();
-    renderKings(sliceOf(state.rows, from, to), from, to);
-  }
   function rerenderArtist() {
     const { from, to } = currentBounds();
     renderArtist(from, to);
@@ -925,16 +906,7 @@
   }
   function wireInteractive() {
     wireLegendHighlight('top-legend', 'top-chart');
-    wireLegendHighlight('kings-legend', 'kings-chart');
     wireLegendHighlight('artist-body', 'artist-chart');
-
-    document.getElementById('kings-legend').addEventListener('click', (e) => {
-      const b = e.target.closest('.legend-item');
-      if (!b) return;
-      const name = b.dataset.name;
-      if (state.kingsHidden.has(name)) state.kingsHidden.delete(name); else state.kingsHidden.add(name);
-      rerenderKings();
-    });
 
     const body = document.getElementById('artist-body');
     body.addEventListener('click', (e) => {
@@ -950,8 +922,6 @@
       else state.compareHidden.add(name);
       rerenderArtist();
     });
-    body.addEventListener('change', (e) => { if (e.target.id === 'compare-input') addCompare(e.target.value); });
-    body.addEventListener('keydown', (e) => { if (e.target.id === 'compare-input' && e.key === 'Enter') addCompare(e.target.value); });
 
     // Słupki „Kiedy słuchasz”: najechanie / dotknięcie pokazuje wartość pod wykresem.
     const pick = (box, out, kind) => (e) => {
@@ -971,6 +941,110 @@
       box.addEventListener('pointerover', pick(box, out, kind));
       box.addEventListener('click', pick(box, out, kind));
     }
+  }
+
+  // ─────────────────────────────────────────────────────── WYBÓR WYKONAWCY (rozwijana lista z wyszukiwaniem)
+  const fold = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l');
+  const combo = { input: null, list: null, items: [], active: -1 };
+  function comboMatches(q) {
+    const all = A.top(state.rows, 'artist', { sortBy: 'ms', limit: 0 }); // wg łącznego czasu słuchania
+    const skip = combo.input && combo.input.dataset.combo === 'compare' ? new Set([state.artist, ...state.compare]) : new Set();
+    const f = fold(q.trim());
+    if (!f) return all.filter((a) => !skip.has(a.name)).slice(0, 40);
+    const starts = [], words = [], inside = [];
+    for (const a of all) {
+      if (skip.has(a.name)) continue;
+      const n = fold(a.name);
+      if (n.startsWith(f)) starts.push(a);
+      else if (n.split(/[\s\-&,.]+/).some((w) => w.startsWith(f))) words.push(a);
+      else if (n.includes(f)) inside.push(a);
+      if (starts.length >= 40) break;
+    }
+    return starts.concat(words, inside).slice(0, 40);
+  }
+  function comboRender() {
+    if (!combo.input) return;
+    const q = combo.input.dataset.touched ? combo.input.value : '';
+    combo.items = comboMatches(q);
+    if (combo.active >= combo.items.length) combo.active = combo.items.length - 1;
+    combo.list.innerHTML = combo.items.length
+      ? combo.items.map((a, i) => `<li role="option" class="combo-opt${i === combo.active ? ' is-active' : ''}${a.name === state.artist && combo.input.dataset.combo === 'artist' ? ' is-current' : ''}" data-i="${i}" aria-selected="${i === combo.active}">
+          ${artistAvatar(a.name, 'avatar--xs')}<span class="combo-name">${esc(a.name)}</span><span class="combo-val">${nf.format(minutes(a.ms))} min</span></li>`).join('')
+      : '<li class="combo-empty">Brak takiego wykonawcy w Twojej historii</li>';
+    const act = combo.list.querySelector('.is-active');
+    if (act) act.scrollIntoView({ block: 'nearest' });
+  }
+  function comboOpen(input) {
+    if (combo.input === input) return;
+    comboClose();
+    combo.input = input;
+    combo.active = -1;
+    delete input.dataset.touched;
+    combo.list = document.createElement('ul');
+    combo.list.className = 'combo-list';
+    combo.list.setAttribute('role', 'listbox');
+    // pointerdown zamiast click — żeby wybór zdążył przed utratą fokusu
+    combo.list.addEventListener('pointerdown', (e) => {
+      const li = e.target.closest('[data-i]');
+      if (!li) return;
+      e.preventDefault();
+      comboPick(combo.items[Number(li.dataset.i)]);
+    });
+    input.closest('.combo').appendChild(combo.list);
+    input.setAttribute('aria-expanded', 'true');
+    requestAnimationFrame(() => input.select());
+    comboRender();
+  }
+  function comboClose() {
+    if (!combo.input) return;
+    combo.input.setAttribute('aria-expanded', 'false');
+    if (combo.input.dataset.combo === 'artist') combo.input.value = state.artist;
+    if (combo.list) combo.list.remove();
+    combo.input = null;
+    combo.list = null;
+  }
+  function comboPick(item) {
+    if (!item || !combo.input) return;
+    const kind = combo.input.dataset.combo;
+    const input = combo.input;
+    comboClose();
+    input.blur();
+    if (kind === 'compare') addCompare(item.name);
+    else { selectArtist(item.name, false); document.getElementById('sheet-title').textContent = item.name; }
+  }
+  function wireCombo() {
+    document.addEventListener('focusin', (e) => { if (e.target.matches('input[data-combo]')) comboOpen(e.target); });
+    document.addEventListener('focusout', (e) => { if (e.target === combo.input) setTimeout(() => { if (combo.input && document.activeElement !== combo.input) comboClose(); }, 120); });
+    document.addEventListener('pointerdown', (e) => { if (combo.input && !e.target.closest('.combo')) comboClose(); });
+    document.addEventListener('input', (e) => {
+      if (e.target !== combo.input) return;
+      combo.input.dataset.touched = '1';
+      combo.active = combo.input.value.trim() ? 0 : -1;
+      comboRender();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (!combo.input || e.target !== combo.input) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const n = combo.items.length;
+        if (!n) return;
+        combo.active = e.key === 'ArrowDown' ? (combo.active + 1) % n : (combo.active - 1 + n) % n;
+        comboRender();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        comboPick(combo.items[Math.max(0, combo.active)]);
+      } else if (e.key === 'Escape') {
+        e.stopPropagation();
+        const input = combo.input;
+        comboClose();
+        input.blur();
+      }
+    });
+    // Klik w strzałkę otwiera listę
+    document.addEventListener('click', (e) => {
+      const caret = e.target.closest('.combo-caret');
+      if (caret) caret.closest('.combo').querySelector('input').focus();
+    });
   }
 
   // ─────────────────────────────────────────────────────── MENU „⋯”
@@ -1140,6 +1214,14 @@
       savePrefs();
       render();
     });
+    document.getElementById('top-mode').addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-mode]');
+      if (!b || b.dataset.mode === state.topMode) return;
+      state.topMode = b.dataset.mode;
+      savePrefs();
+      const { from, to } = currentBounds();
+      renderTopChart(sliceOf(state.rows, from, to), from, to);
+    });
     document.getElementById('top-unit').addEventListener('click', (e) => {
       const b = e.target.closest('button');
       if (!b || b.disabled) return;
@@ -1161,7 +1243,7 @@
       const el = e.target.closest('[data-artist]');
       if (el) selectArtist(el.dataset.artist, true);
     };
-    for (const id of ['top-artists', 'top-tracks', 'top-albums', 'recent-list', 'kings-now', 'kings-list']) {
+    for (const id of ['top-artists', 'top-tracks', 'top-albums', 'recent-list']) {
       const el = document.getElementById(id);
       if (!el) continue;
       el.addEventListener('click', onArtistPick);
@@ -1186,13 +1268,6 @@
       if (el) selectArtist(el.dataset.artist, true);
     });
 
-    document.getElementById('kings-unit').addEventListener('click', (e) => {
-      const b = e.target.closest('button');
-      if (!b || b.disabled) return;
-      state.kingsUnit = b.dataset.unit;
-      savePrefs();
-      render();
-    });
 
     document.addEventListener('click', (e) => {
       if (e.target.closest('[data-logout]')) { logout(); return; }
@@ -1206,16 +1281,7 @@
       try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Skopiowano ✓'; } catch { /* ignoruj */ }
     });
 
-    const search = document.getElementById('artist-search');
-    const commit = () => {
-      const v = search.value.trim();
-      if (!v) return;
-      // Dopasowanie bez względu na wielkość liter.
-      const match = A.allArtists(state.rows).find((a) => a.toLowerCase() === v.toLowerCase()) || v;
-      selectArtist(match, false);
-    };
-    search.addEventListener('change', commit);
-    search.addEventListener('keydown', (e) => { if (e.key === 'Enter') commit(); });
+    wireCombo();
 
     document.getElementById('artist-span').addEventListener('click', (e) => {
       const b = e.target.closest('button');
@@ -1523,7 +1589,17 @@
     targets.forEach((t) => io.observe(t));
   }
 
+  /** Bez przypadkowego przybliżania: szczypanie i podwójne stuknięcie (iOS ignoruje user-scalable=no). */
+  function blockZoom() {
+    const stop = (e) => e.preventDefault();
+    document.addEventListener('gesturestart', stop, { passive: false });
+    document.addEventListener('gesturechange', stop, { passive: false });
+    document.addEventListener('touchmove', (e) => { if (e.touches.length > 1 || (e.scale && e.scale !== 1)) e.preventDefault(); }, { passive: false });
+    // Podwójne stuknięcie blokuje CSS: touch-action: manipulation.
+  }
+
   async function init() {
+    blockZoom();
     loadPrefs();
     state.booting = Boolean(window.SpotiLive) && location.protocol !== 'file:';
     wire();

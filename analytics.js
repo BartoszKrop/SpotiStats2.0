@@ -379,6 +379,41 @@
    *  - peaks: tygodnie z największym słuchaniem jednej pozycji (minuty).
    * kind: 'artist' | 'track'. Tydzień bez żadnych odsłuchów przerywa serię.
    */
+  /**
+   * Pozycja wybranych wykonawców/utworów w rankingu każdego okresu (1 = nr 1).
+   * Poza top `depth` → depth+1 („dalej”); okres bez odsłuchów → null.
+   * Zwraca też lidera każdego okresu (do dymka).
+   */
+  function rankSeries(rows, from, to, unit, kind, keys, { depth = 10, sortBy = 'ms' } = {}) {
+    const keyOf = KEYERS[kind];
+    const buckets = bucketList(from, to, unit);
+    const index = new Map(buckets.map((b, i) => [b, i]));
+    const per = buckets.map(() => new Map());
+    for (const r of rows) {
+      if (r.t < from || r.t >= to) continue;
+      const i = index.get(bucketStart(r.t, unit));
+      if (i === undefined) continue;
+      const k = keyOf(r);
+      let e = per[i].get(k);
+      if (!e) per[i].set(k, (e = { name: kind === 'artist' ? r.artist : kind === 'track' ? r.track : r.album, artist: r.artist, ms: 0, plays: 0 }));
+      e.ms += r.ms;
+      if (r.ms >= MIN_STREAM_MS) e.plays++;
+    }
+    const metric = sortBy === 'plays' ? 'plays' : 'ms';
+    const other = metric === 'ms' ? 'plays' : 'ms';
+    const rankings = per.map((m) => [...m.entries()].sort((a, b) => b[1][metric] - a[1][metric] || b[1][other] - a[1][other] || a[0].localeCompare(b[0])));
+    const leaders = rankings.map((list) => (list.length ? { ...list[0][1], key: list[0][0] } : null));
+    const series = keys.map((key) => ({
+      key,
+      values: rankings.map((list) => {
+        if (!list.length) return null;
+        const pos = list.findIndex(([k]) => k === key);
+        return pos >= 0 && pos < depth ? pos + 1 : depth + 1;
+      })
+    }));
+    return { buckets, leaders, series };
+  }
+
   function records(rows, kind, { limit = 5, sortBy = 'ms' } = {}) {
     const keyOf = kind === 'artist' ? (r) => r.artist : (r) => trackKey(r);
     const nameOf = kind === 'artist' ? (r) => r.artist : (r) => r.track;
@@ -398,7 +433,7 @@
     const stat = new Map(); // key -> { name, artist, weeks, longest, longestFrom, run, runFrom }
     const peaks = [];
     let best = null;
-    let prevWeek = null, prevKey = null;
+    let prevWeek = null, prevKey = null, prevLeader = null;
     for (const w of starts) {
       let leaderKey = null, leader = null;
       for (const [k, e] of weeks.get(w)) {
@@ -415,11 +450,14 @@
       if (!best || st.longest > best.weeks) best = { key: leaderKey, name: st.name, artist: st.artist, weeks: st.longest, from: st.longestFrom };
       prevKey = leaderKey;
       prevWeek = w;
+      prevLeader = leader;
     }
+    const cur = prevKey != null ? stat.get(prevKey) : null;
+    const current = cur ? { key: prevKey, name: cur.name, artist: cur.artist, run: cur.run, week: prevWeek, ms: prevLeader.ms, plays: prevLeader.plays } : null;
     const leaders = [...stat.values()].sort((a, b) => b.weeks - a.weeks || b.longest - a.longest || a.name.localeCompare(b.name)).slice(0, limit)
       .map((x) => ({ key: x.key, name: x.name, artist: x.artist, weeks: x.weeks, longest: x.longest, longestFrom: x.longestFrom }));
     peaks.sort((a, b) => b[metric] - a[metric] || b.ms - a.ms || a.week - b.week);
-    return { totalWeeks: starts.length, leaders, longest: best, peaks: peaks.slice(0, limit) };
+    return { totalWeeks: starts.length, leaders, longest: best, current, peaks: peaks.slice(0, limit) };
   }
 
   /**
@@ -440,6 +478,7 @@
   }
 
   const API = {
+    rankSeries,
     mergeRows,
     records,
     listeningHours,

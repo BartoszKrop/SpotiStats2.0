@@ -217,3 +217,19 @@ test('mergeRows: nowszy eksport dokłada brakujące odsłuchy bez duplikatów, w
   assert.equal(A.mergeRows(old, old).length, 2);
   assert.equal(old.length, 2); // wejście nietknięte
 });
+
+test('rankSeries: pozycje w każdym okresie, „dalej” i lider', () => {
+  const day = 86_400_000;
+  const t0 = new Date(2024, 0, 1).getTime();
+  const rows = [
+    { t: t0 + 1000, artist: 'A', track: 'a', album: '', uri: '', ms: 300_000 },
+    { t: t0 + 2000, artist: 'B', track: 'b', album: '', uri: '', ms: 100_000 },
+    { t: t0 + day + 1000, artist: 'B', track: 'b', album: '', uri: '', ms: 400_000 },
+    { t: t0 + day + 2000, artist: 'C', track: 'c', album: '', uri: '', ms: 100_000 }
+  ];
+  const r = A.rankSeries(rows, t0, t0 + 3 * day, 'day', 'artist', ['A', 'B'], { depth: 1 });
+  assert.deepStrictEqual(r.series[0].values, [1, 2, null]);
+  assert.deepStrictEqual(r.series[1].values, [2, 1, null]);
+  assert.strictEqual(r.leaders[1].name, 'B');
+  assert.strictEqual(r.leaders[2], null);
+});

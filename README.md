@@ -9,8 +9,8 @@ Statystyki słuchania Spotify w stylu stats.fm, liczone z **pełnego eksportu hi
 - **Zakresy:** 7 dni, 28 dni, pół roku, wybrany rok kalendarzowy, cały czas.
   7/28 dni i pół roku liczone są wstecz od **ostatniego odsłuchu w danych** (eksport bywa sprzed kilku tygodni, więc „od dziś” dawałoby pusto).
 - **Top 10** wykonawców, utworów i albumów — sortowanie wg czasu albo wg liczby odtworzeń.
-- **Top 10 w czasie** — wykres liniowy minut słuchania (dni / tygodnie / miesiące) dla top 10 wykonawców albo utworów z wybranego zakresu; legenda pozwala włączać i wyłączać linie.
-- **Nr 1 tygodnia** — kto był najczęściej słuchanym wykonawcą w każdym tygodniu (albo miesiącu), wykres pozycji w rankingu i licznik tygodni na szczycie.
+- **Ranking w czasie** — przełącznik Minuty / Pozycja (miejsce w rankingu w każdym okresie); wykres liniowy minut słuchania (dni / tygodnie / miesiące) dla top 10 wykonawców albo utworów z wybranego zakresu; legenda pozwala włączać i wyłączać linie.
+- **Na szczycie** — kto jest nr 1 w tym tygodniu, najdłuższa seria na nr 1, najwięcej tygodni na szczycie i największe tygodnie (wykonawcy albo utwory).
 - **Logowanie na konto** — przy wejściu ekran „Kto słucha?”: wybierasz osobę i widzisz tylko jej statystyki; „Zmień konto” (w menu „⋯” albo klik w awatar) wraca do wyboru. To wybór profilu, nie hasło — dane i tak są publiczne na gałęzi `dane`.
 - **5 kont** — Ty + 4 znajomych (limit Spotify dla prywatnych aplikacji). Każde konto ma osobny eksport w przeglądarce i osobny automat.
 - **Wykonawca w czasie** — wykres dowolnego wykonawcy (wyszukiwarka albo klik w topce), cały czas lub wybrany zakres, do tego jego najczęściej słuchane utwory.
