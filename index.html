@@ -2,7 +2,7 @@
 <html lang="pl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#121212" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./ikony/apple-touch-icon.png" />
@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=25" />
+    <link rel="stylesheet" href="./styles.css?v=27" />
   </head>
   <body>
     <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -54,10 +54,9 @@
 
         <nav class="side-nav" aria-label="Sekcje">
           <a href="#sec-top" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-top"/></svg>Topki</a>
-          <a href="#sec-kings" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-crown"/></svg>Nr 1 wykonawca</a>
-          <a href="#sec-records" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-trophy"/></svg>Rekordy</a>
+          <a href="#sec-records" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-crown"/></svg>Na szczycie</a>
           <a href="#sec-when" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg>Kiedy słuchasz</a>
-          <a href="#sec-trend" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-trend"/></svg>Top 10 w czasie</a>
+          <a href="#sec-trend" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-trend"/></svg>Ranking w czasie</a>
           <a href="#artist-card" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-user"/></svg>Wykonawca</a>
           <a href="./spotify.html" class="side-link"><svg class="ico" aria-hidden="true"><use href="#i-cloud"/></svg>Automat</a>
         </nav>
@@ -208,33 +207,9 @@
             <div id="recent-list"></div>
           </section>
 
-          <section id="sec-kings" class="section card">
-            <div class="section-head">
-              <h2 class="section-title">Nr 1 wykonawca</h2>
-              <div class="card-controls">
-                <div class="seg" id="kings-unit" role="group" aria-label="Okres">
-                  <button type="button" data-unit="week">Tygodnie</button>
-                  <button type="button" data-unit="month">Miesiące</button>
-                </div>
-              </div>
-            </div>
-            <div class="kings">
-              <div class="kings-side">
-                <div id="kings-now" class="kings-now"></div>
-                <h3 class="sub-title">Najczęściej na szczycie</h3>
-                <ol id="kings-list" class="kings-list"></ol>
-              </div>
-              <div class="kings-chart">
-                <div id="kings-legend" class="legend"></div>
-                <div id="kings-chart"></div>
-                <p class="hint">Pozycja w rankingu w każdym okresie (#1 na górze, „dalej” = poza top 5). Kliknij nazwę, żeby ją ukryć lub pokazać.</p>
-              </div>
-            </div>
-          </section>
-
           <section id="sec-records" class="section card">
             <div class="section-head">
-              <h2 class="section-title">Rekordy</h2>
+              <h2 class="section-title">Na szczycie</h2>
               <div class="card-controls">
                 <div class="seg" id="records-kind" role="group" aria-label="Co pokazać">
                   <button type="button" data-kind="artist">Wykonawcy</button>
@@ -243,7 +218,7 @@
               </div>
             </div>
             <div id="records-body" class="records"></div>
-            <p class="hint">W wybranym okresie, tygodniami (poniedziałek–niedziela). Tydzień bez odsłuchów przerywa serię.</p>
+            <p class="hint">Nr 1 liczony tygodniami (poniedziałek–niedziela) w wybranym okresie. Tydzień bez odsłuchów przerywa serię. Kliknij, żeby otworzyć kartę wykonawcy.</p>
           </section>
 
           <section id="sec-when" class="section card">
@@ -256,8 +231,12 @@
 
           <section id="sec-trend" class="section card">
             <div class="section-head">
-              <h2 class="section-title">Top 10 w czasie</h2>
+              <h2 class="section-title">Ranking w czasie</h2>
               <div class="card-controls">
+                <div class="seg" id="top-mode" role="group" aria-label="Co na wykresie">
+                  <button type="button" data-mode="ms">Minuty</button>
+                  <button type="button" data-mode="rank">Pozycja</button>
+                </div>
                 <div class="seg" id="top-kind" role="group" aria-label="Co pokazać">
                   <button type="button" data-kind="artist">Wykonawcy</button>
                   <button type="button" data-kind="track">Utwory</button>
@@ -271,14 +250,17 @@
             </div>
             <div id="top-legend" class="legend" aria-label="Legenda — kliknij, by pokazać lub ukryć"></div>
             <div id="top-chart"></div>
-            <p class="hint">Minuty słuchania w każdym okresie. Kliknij nazwę, żeby ją pokazać lub ukryć (max 8 naraz), najedź, żeby ją wyróżnić.</p>
+            <p class="hint" id="top-hint"></p>
           </section>
 
           <section class="section card" id="artist-card">
             <div class="section-head">
               <h2 class="section-title">Wykonawca w czasie</h2>
               <div class="card-controls">
-                <input id="artist-search" class="field-input" list="artist-list" placeholder="Szukaj wykonawcy…" autocomplete="off" spellcheck="false" />
+                <div class="combo">
+                  <input id="artist-search" class="field-input" data-combo="artist" placeholder="Wybierz albo wpisz wykonawcę…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-autocomplete="list" />
+                  <svg class="combo-caret" aria-hidden="true" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
                 <datalist id="artist-list"></datalist>
                 <div class="seg" id="artist-span" role="group" aria-label="Okres wykresu">
                   <button type="button" data-span="all">Cały czas</button>
@@ -313,11 +295,11 @@
     </div>
 
     <script src="./jszip.min.js"></script>
-    <script src="./analytics.js?v=25"></script>
-    <script src="./charts.js?v=25"></script>
-    <script src="./art.js?v=25"></script>
-    <script src="./cloud.js?v=25"></script>
-    <script src="./live.js?v=25"></script>
-    <script src="./app.js?v=25"></script>
+    <script src="./analytics.js?v=27"></script>
+    <script src="./charts.js?v=27"></script>
+    <script src="./art.js?v=27"></script>
+    <script src="./cloud.js?v=27"></script>
+    <script src="./live.js?v=27"></script>
+    <script src="./app.js?v=27"></script>
   </body>
 </html>
