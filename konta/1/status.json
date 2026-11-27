@@ -1,7 +1,7 @@
 {
  "connectedAt": "2026-11-26T18:30:14.414Z",
- "error": null,
- "errorAt": null,
+ "error": "Spotify API: 503 ",
+ "errorAt": "2026-11-27T22:18:06.640Z",
  "lastSync": "2026-11-27T21:52:38.829Z",
  "lastPlayedAt": "2026-11-27T21:12:25.345Z",
  "files": [

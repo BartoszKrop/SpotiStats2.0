@@ -6,7 +6,7 @@
    "connectedAt": "2026-11-26T18:30:14.414Z",
    "lastSync": "2026-11-27T21:52:38.829Z",
    "lastPlayedAt": "2026-11-27T21:12:25.345Z",
-   "error": null,
+   "error": "Spotify API: 503 ",
    "files": [
     "odsluchy/2026.json"
    ]
@@ -28,5 +28,5 @@
    "name": null
   }
  ],
- "updatedAt": "2026-11-27T21:52:38.930Z"
+ "updatedAt": "2026-11-27T22:18:06.642Z"
 }
