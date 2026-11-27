@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=27" />
+    <link rel="stylesheet" href="./styles.css?v=28" />
   </head>
   <body>
     <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -70,6 +70,7 @@
       <main class="main">
         <!-- ─── NAGŁÓWEK PROFILU ─────────────────────────────── -->
         <header class="hero" id="hero">
+          <div class="hero-bg" aria-hidden="true"></div>
           <div id="hero-avatar" class="avatar avatar--xl" aria-hidden="true"></div>
           <div class="hero-text">
             <span class="hero-kicker">Profil</span>
@@ -79,6 +80,7 @@
           <div class="hero-actions" id="topbar-actions">
             <button id="btn-menu" class="icon-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="hero-menu" title="Więcej opcji"><svg class="ico" aria-hidden="true"><use href="#i-more"/></svg><span class="sr-only">Więcej opcji</span></button>
             <div id="hero-menu" class="menu hidden" role="menu" aria-label="Opcje konta">
+              <button class="menu-item" type="button" role="menuitem" data-edit-profile><svg class="ico" aria-hidden="true"><use href="#i-user"/></svg><span>Edytuj profil<small>nazwa, zdjęcie profilowe, tło</small></span></button>
               <button id="btn-cloud" class="menu-item" type="button" role="menuitem"><svg class="ico" aria-hidden="true"><use href="#i-cloud"/></svg><span>Zapisz na GitHubie<small>żeby eksport był na każdym urządzeniu</small></span></button>
               <label class="menu-item" role="menuitem" tabindex="0"><svg class="ico" aria-hidden="true"><use href="#i-upload"/></svg><span>Dodaj nowszy eksport<small>dołoży się bez dublowania</small></span>
                 <input id="reimport-files" type="file" accept=".zip,.json,application/json,application/zip" multiple class="sr-only" tabindex="-1" />
@@ -282,6 +284,39 @@
       </main>
     </div>
 
+    <!-- ─── EDYCJA PROFILU ───────────────────────────────── -->
+    <div id="profile-dialog" class="sheet sheet--dialog hidden" role="dialog" aria-modal="true" aria-labelledby="pd-title">
+      <div class="sheet__backdrop" data-pd-close></div>
+      <div class="sheet__panel pd">
+        <div class="sheet__bar">
+          <button type="button" class="icon-btn" data-pd-close title="Zamknij"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg><span class="sr-only">Zamknij</span></button>
+          <span class="sheet__title" id="pd-title">Edytuj profil</span>
+        </div>
+        <div class="sheet__body pd-body">
+          <div class="pd-cover" id="pd-cover">
+            <div class="pd-cover__img" id="pd-cover-img"></div>
+            <div class="pd-cover__actions">
+              <label class="btn btn--outline btn--sm pd-btn">Zmień tło<input id="pd-cover-file" type="file" accept="image/*" class="sr-only" /></label>
+              <button type="button" class="btn btn--ghost btn--sm pd-btn" id="pd-cover-del">Usuń</button>
+            </div>
+            <div class="pd-avatar" id="pd-avatar"></div>
+          </div>
+          <div class="pd-avatar-actions">
+            <label class="btn btn--outline btn--sm">Zmień profilowe<input id="pd-avatar-file" type="file" accept="image/*" class="sr-only" /></label>
+            <button type="button" class="btn btn--ghost btn--sm" id="pd-avatar-del">Usuń</button>
+          </div>
+          <label class="pd-label" for="pd-name">Nazwa</label>
+          <input id="pd-name" class="field-input pd-name" type="text" maxlength="40" placeholder="np. Bartek" autocomplete="off" />
+          <p class="pd-note">Bez tła w profilu pokazuje się rozmyte zdjęcie Twojego nr 1 wykonawcy. Profil zapisuje się na GitHubie razem z danymi (widać go na każdym urządzeniu i jest publiczny jak reszta statystyk).</p>
+          <p id="pd-status" class="cloud-status" role="status" aria-live="polite"></p>
+          <div class="pd-actions">
+            <button type="button" class="btn btn--ghost btn--sm" data-pd-close>Anuluj</button>
+            <button type="button" class="btn btn--primary btn--sm" id="pd-save">Zapisz</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ─── KARTA WYKONAWCY (na wierzchu) ─────────────────── -->
     <div id="artist-sheet" class="sheet hidden" role="dialog" aria-modal="true" aria-label="Wykonawca">
       <div class="sheet__backdrop" data-sheet-close></div>
@@ -295,11 +330,11 @@
     </div>
 
     <script src="./jszip.min.js"></script>
-    <script src="./analytics.js?v=27"></script>
-    <script src="./charts.js?v=27"></script>
-    <script src="./art.js?v=27"></script>
-    <script src="./cloud.js?v=27"></script>
-    <script src="./live.js?v=27"></script>
-    <script src="./app.js?v=27"></script>
+    <script src="./analytics.js?v=28"></script>
+    <script src="./charts.js?v=28"></script>
+    <script src="./art.js?v=28"></script>
+    <script src="./cloud.js?v=28"></script>
+    <script src="./live.js?v=28"></script>
+    <script src="./app.js?v=28"></script>
   </body>
 </html>
