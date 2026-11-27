@@ -477,7 +477,88 @@
     return out.sort((a, b) => a.t - b.t);
   }
 
+  // ────────────────────────────────────────────────────────── UTWÓR / ALBUM
+
+  /** Szczegóły utworu lub albumu (kind: 'track' | 'album', key jak w top()). */
+  function itemDetails(rows, kind, key) {
+    const keyOf = KEYERS[kind];
+    const own = rows.filter((r) => keyOf(r) === key);
+    if (!own.length) return null;
+    const s = summary(own, 0, 1);
+    const days = new Map();
+    let skips = 0;
+    for (const r of own) {
+      if (r.ms < MIN_STREAM_MS) { skips++; continue; }
+      const d = startOfDay(r.t);
+      days.set(d, (days.get(d) || 0) + 1);
+    }
+    let bestDay = null;
+    for (const [day, plays] of days) if (!bestDay || plays > bestDay.plays) bestDay = { day, plays };
+    const f = own[0];
+    return {
+      kind,
+      key,
+      name: kind === 'track' ? f.track : f.album,
+      artist: f.artist,
+      album: f.album,
+      ms: s.ms,
+      plays: s.plays,
+      skips,
+      days: days.size,
+      first: f.t,
+      last: own[own.length - 1].t,
+      bestDay,
+      tracks: kind === 'album' ? top(own, 'track', { limit: 0 }) : null,
+      rows: own
+    };
+  }
+
+  // ────────────────────────────────────────────────────────── PORÓWNANIE ZE ZNAJOMYM
+
+  /**
+   * Porównanie dwóch historii: zgodność gustu (0–100: wspólna część udziałów wykonawców w czasie słuchania),
+   * wspólni wykonawcy i utwory (od najbardziej wspólnych), kto słucha więcej.
+   */
+  function compareUsers(aRows, bRows, { limit = 10 } = {}) {
+    const side = (rows) => {
+      const map = aggregate(rows, 'artist');
+      let ms = 0;
+      for (const e of map.values()) ms += e.ms;
+      return { map, ms, tracks: aggregate(rows, 'track'), sum: summary(rows, 0, 1) };
+    };
+    const a = side(aRows);
+    const b = side(bRows);
+    const shared = (am, bm, aTot, bTot) => {
+      const out = [];
+      for (const [k, ea] of am) {
+        const eb = bm.get(k);
+        if (!eb) continue;
+        const sa = aTot ? ea.ms / aTot : 0;
+        const sb = bTot ? eb.ms / bTot : 0;
+        out.push({ key: k, name: ea.name, artist: ea.artist, album: ea.album, a: { ms: ea.ms, plays: ea.plays, share: sa }, b: { ms: eb.ms, plays: eb.plays, share: sb }, overlap: Math.min(sa, sb) });
+      }
+      return out.sort((x, y) => y.overlap - x.overlap || (y.a.ms + y.b.ms) - (x.a.ms + x.b.ms));
+    };
+    const artists = shared(a.map, b.map, a.ms, b.ms);
+    let tA = 0, tB = 0;
+    for (const e of a.tracks.values()) tA += e.ms;
+    for (const e of b.tracks.values()) tB += e.ms;
+    const tracks = shared(a.tracks, b.tracks, tA, tB);
+    const score = Math.round(artists.reduce((acc, x) => acc + x.overlap, 0) * 100);
+    return {
+      score,
+      a: { ms: a.sum.ms, plays: a.sum.plays, artists: a.map.size },
+      b: { ms: b.sum.ms, plays: b.sum.plays, artists: b.map.size },
+      sharedArtists: artists.length,
+      artists: limit ? artists.slice(0, limit) : artists,
+      tracks: limit ? tracks.slice(0, limit) : tracks
+    };
+  }
+
   const API = {
+    itemDetails,
+    compareUsers,
+    keyOf: (kind, r) => KEYERS[kind](r),
     rankSeries,
     mergeRows,
     records,

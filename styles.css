@@ -774,3 +774,79 @@ html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adj
   .pd-avatar-actions { padding-left: calc(72px + 1.5rem); margin-top: -2.2rem; }
   .pd-avatar-actions .btn { padding: 0.4rem 0.7rem; }
 }
+
+/* ══ Karta utworu / albumu (v29) ══ */
+.item-card { display: flex; flex-direction: column; gap: 1rem; }
+.item-head { display: flex; align-items: flex-end; gap: 1.25rem; }
+.avatar--item { width: 148px; height: 148px; border-radius: 6px; font-size: 2.6rem; flex-shrink: 0; box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55); }
+.avatar--xs { width: 22px; height: 22px; font-size: 0.55rem; }
+.avatar--round { border-radius: 50%; }
+.item-id { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.item-kicker { font-size: 0.75rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.06em; }
+.item-name { line-height: 1.05; word-break: break-word; }
+.item-links { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.2rem; }
+.link-chip {
+  display: inline-flex; align-items: center; gap: 0.4rem; max-width: 100%; border: none; cursor: pointer; font: inherit; font-size: 0.85rem; font-weight: 700;
+  color: var(--text); background: var(--elev); border-radius: 999px; padding: 0.25rem 0.75rem 0.25rem 0.3rem; transition: background 0.15s;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.link-chip:hover { background: var(--elev-hover); }
+.lc-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.item-id { flex: 1; }
+.item-links { min-width: 0; max-width: 100%; }
+.link-chip[data-item] { padding-left: 0.65rem; }
+.item-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.9rem 1.25rem; }
+.item-facts small { color: var(--text-2); font-weight: 500; }
+.item-pos { color: var(--green); }
+.item-chart-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.item-chart-head .sub-title { margin: 0; }
+#item-unit button { font-size: 0.74rem; padding: 0.3rem 0.7rem; }
+@media (max-width: 760px) {
+  .item-card { padding: 1rem 1rem calc(2rem + env(safe-area-inset-bottom)) !important; }
+  .item-head { flex-direction: column; align-items: stretch; gap: 0.9rem; }
+  .avatar--item { align-self: flex-start; }
+  .avatar--item { width: 120px; height: 120px; }
+  .item-facts { grid-template-columns: 1fr 1fr; }
+}
+
+/* ══ Ty i znajomy ══ */
+.friend { display: flex; flex-direction: column; gap: 1.5rem; }
+.fr-top { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; }
+.fr-people { display: flex; align-items: center; justify-content: center; gap: clamp(1rem, 5vw, 3rem); }
+.fr-person { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; font-weight: 700; font-size: 0.9rem; max-width: 110px; text-align: center; }
+.fr-person > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.fr-score {
+  --p: 0; width: 112px; height: 112px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(closest-side, var(--card) 80%, transparent 81%), conic-gradient(var(--green) calc(var(--p) * 1%), var(--elev) 0);
+}
+.fr-score b { font-size: 1.7rem; font-weight: 900; letter-spacing: -0.03em; }
+.fr-score small { font-size: 0.7rem; color: var(--text-2); font-weight: 700; }
+.fr-verdict { color: var(--text-2); font-size: 0.85rem; font-weight: 600; text-align: center; }
+.duels { width: min(560px, 100%); display: flex; flex-direction: column; gap: 0.75rem; }
+.duel__label { font-size: 0.72rem; color: var(--text-2); font-weight: 700; text-align: center; margin-bottom: 0.2rem; }
+.duel__vals { display: flex; justify-content: space-between; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.duel__vals b { color: var(--text-2); }
+.duel__vals b.is-win { color: var(--text); }
+.duel__bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; gap: 2px; margin-top: 0.3rem; background: var(--elev); }
+.duel__bar span { transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.duel__bar span:first-child { background: var(--green); }
+.duel__bar span:last-child { background: #338ced; }
+.fr-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+.fr-key { font-size: 0.7rem; color: var(--text-2); font-weight: 600; margin-left: 0.5rem; white-space: nowrap; }
+.fr-key i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin: 0 0.25rem 0 0.4rem; }
+i.fr-a, .fr-bar--a { background: var(--green); }
+i.fr-b, .fr-bar--b { background: #338ced; }
+.fr-list { list-style: none; display: flex; flex-direction: column; }
+.fr-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.45rem 0.5rem; border-radius: 6px; cursor: pointer; transition: background 0.15s; }
+.fr-row:hover, .fr-row:focus-visible { background: var(--elev); outline: none; }
+.fr-row .track-text { flex: 1; min-width: 0; }
+.fr-bars { display: flex; flex-direction: column; gap: 2px; margin-top: 0.3rem; }
+.fr-bar { display: block; height: 3px; border-radius: 2px; width: var(--w); min-width: 3px; transition: width 0.6s; }
+.fr-vals { display: flex; flex-direction: column; align-items: flex-end; font-size: 0.75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fr-vals .fr-a { color: var(--green); background: none; }
+.fr-vals .fr-b { color: #6aaef5; background: none; }
+@media (max-width: 760px) {
+  .fr-lists { grid-template-columns: 1fr; }
+  .fr-score { width: 96px; height: 96px; }
+  .fr-score b { font-size: 1.45rem; }
+}

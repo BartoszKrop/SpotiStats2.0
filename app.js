@@ -61,6 +61,10 @@
     liveCache: new Map(), // slot -> znormalizowane wiersze z automatu
     images: new Map(), // nazwa wykonawcy małymi literami -> url zdjęcia (z automatu)
     covers: new Map(), // „wykonawca|album” małymi literami -> url okładki
+    item: null, // otwarta karta utworu/albumu: { kind, key }
+    itemUnit: null,
+    friend: null, // konto znajomego do porównania
+    friendRows: new Map(), // slot -> wiersze znajomego (albo Promise w trakcie wczytywania)
     imagesReady: new Set() // adresy zdjęć już wczytanych (tylko te pokazujemy — bez migania)
   };
 
@@ -516,9 +520,11 @@
     renderTops(slice);
     renderRecent();
     renderWhen(slice);
+    renderFriend(slice, from, to);
     renderRecords(slice, from, to);
     renderTopChart(slice, from, to);
     renderArtist(from, to);
+    if (state.item && sheetOpen() && state.sheetMode === 'item') renderItem();
   }
 
   const RANGE_NAMES = { '7d': 'w ostatnich 7 dniach', '28d': 'w ostatnich 28 dniach', '6m': 'w ostatnim półroczu', all: 'od początku' };
@@ -596,7 +602,7 @@
     if (!items.length) return '<p class="no-data">Brak odsłuchów w tym zakresie.</p>';
     return `<ol class="tracklist">${items.map((it, i) => {
       const other = state.sortBy === 'plays' ? `${nf.format(minutes(it.ms))} min` : `${nf.format(it.plays)} odtw.`;
-      return `<li class="track-row" data-artist="${esc(it.artist)}" tabindex="0" role="button" title="Pokaż wykres: ${esc(it.artist)}">
+      return `<li class="track-row" data-artist="${esc(it.artist)}" data-item="${kind}" data-key="${encodeURIComponent(it.key)}" tabindex="0" role="button" title="Szczegóły: ${esc(it.name)}">
         <span class="track-rank">${i + 1}${delta(prev, it, i)}</span>
         ${coverAvatar(kind === 'album' ? it.name : `${it.name} ${it.artist}`, it.artist, kind === 'album' ? it.name : it.album, 'avatar--cover')}
         <span class="track-text"><span class="track-name">${esc(it.name)}</span><span class="track-sub">${esc(it.artist)}</span></span>
@@ -653,6 +659,7 @@
     const av = (it, cls) => (kind === 'artist' ? artistAvatar(it.name, cls) : coverAvatar(`${it.name} ${it.artist}`, it.artist, it.album, cls));
     const sub = (it) => (kind === 'track' ? `<span class="track-sub">${esc(it.artist)}</span>` : '');
     const noun = kind === 'artist' ? 'wykonawca' : 'utwór';
+    const itm = (it) => (kind === 'track' && it.key ? ` data-item="track" data-key="${encodeURIComponent(it.key)}"` : '');
     const hero = r.longest;
     let now = r.current;
     // Tydzień przełomu roku, który w większości należy już do następnego roku (jak w tygodniach ISO), pomijamy.
@@ -670,23 +677,23 @@
     const nowLabel = !now ? '' : now.week === thisWeek && to > Date.now() ? 'Nr 1 w tym tygodniu'
       : now.week === lastWeek ? `Nr 1 w ostatnim tygodniu ${periodName}` : `Ostatni nr 1 ${state.range === 'year' ? `w ${state.year}` : 'w tym okresie'}`;
     const nowSub = now ? `${now.run > 1 ? `${plWeeks(now.run)} z rzędu · ` : ''}${state.sortBy === 'plays' ? `${nf.format(now.plays)} odtw.` : `${nf.format(minutes(now.ms))} min`} w tygodniu od ${fmtDate(now.week)}` : '';
-    const leaders = r.leaders.map((l, i) => `<li class="rec-row" data-artist="${esc(l.artist)}" tabindex="0" role="button">
+    const leaders = r.leaders.map((l, i) => `<li class="rec-row" data-artist="${esc(l.artist)}"${itm(l)} tabindex="0" role="button">
         <span class="track-rank">${i + 1}</span>
         <span class="track-text"><span class="track-name">${esc(l.name)}</span>${sub(l)}</span>
         <span class="rec-val"><b>${plWeeks(l.weeks)}</b><small>najdłużej z rzędu: ${l.longest}</small></span></li>`).join('');
-    const peaks = r.peaks.map((p, i) => `<li class="rec-row" data-artist="${esc(p.artist)}" tabindex="0" role="button">
+    const peaks = r.peaks.map((p, i) => `<li class="rec-row" data-artist="${esc(p.artist)}"${itm(p)} tabindex="0" role="button">
         <span class="track-rank">${i + 1}</span>
         <span class="track-text"><span class="track-name">${esc(p.name)}</span><span class="track-sub">${kind === 'track' ? `${esc(p.artist)} · ` : ''}${fmtWeek(p.week)}</span></span>
         <span class="rec-val"><b>${state.sortBy === 'plays' ? `${nf.format(p.plays)} odtw.` : `${nf.format(minutes(p.ms))} min`}</b><small>${state.sortBy === 'plays' ? `${nf.format(minutes(p.ms))} min` : `${nf.format(p.plays)} odtw.`}</small></span></li>`).join('');
     el.innerHTML = `
       <div class="rec-heroes">
-      ${now ? `<button type="button" class="rec-hero rec-hero--now" data-artist="${esc(now.artist)}">
+      ${now ? `<button type="button" class="rec-hero rec-hero--now" data-artist="${esc(now.artist)}"${itm(now)}>
         <span class="rec-hero__label"><svg class="ico ico--sm" aria-hidden="true"><use href="#i-crown"/></svg> ${nowLabel}</span>
         <span class="rec-hero__main">${av(now, 'avatar--lg')}<span><span class="rec-hero__name">${esc(now.name)}</span>
           ${kind === 'track' ? `<span class="rec-hero__sub">${esc(now.artist)}</span>` : ''}
           <span class="rec-hero__sub">${nowSub}</span></span></span>
       </button>` : ''}
-      <button type="button" class="rec-hero" data-artist="${esc(hero.artist)}">
+      <button type="button" class="rec-hero" data-artist="${esc(hero.artist)}"${itm(hero)}>
         <span class="rec-hero__label"><svg class="ico ico--sm" aria-hidden="true"><use href="#i-trophy"/></svg> Najdłuższa seria na nr 1 (${noun})</span>
         <span class="rec-hero__main">${av(hero, 'avatar--lg')}<span><span class="rec-hero__name">${esc(hero.name)}</span>
           <span class="rec-hero__val">${plWeeks(hero.weeks)} z rzędu</span>
@@ -742,7 +749,7 @@
     const el = document.getElementById('recent-list');
     const out = [];
     for (let i = state.rows.length - 1; i >= 0 && out.length < 10; i--) if (state.rows[i].ms >= 30_000) out.push(state.rows[i]);
-    el.innerHTML = out.length ? `<ol class="tracklist">${out.map((r) => `<li class="track-row track-row--recent" data-artist="${esc(r.artist)}" tabindex="0" role="button" title="Pokaż wykres: ${esc(r.artist)}">
+    el.innerHTML = out.length ? `<ol class="tracklist">${out.map((r) => `<li class="track-row track-row--recent" data-artist="${esc(r.artist)}" data-item="track" data-key="${encodeURIComponent(A.keyOf('track', r))}" tabindex="0" role="button" title="Szczegóły: ${esc(r.track)}">
         ${coverAvatar(`${r.track} ${r.artist}`, r.artist, r.album, 'avatar--cover')}
         <span class="track-text"><span class="track-name">${esc(r.track)}</span><span class="track-sub">${esc(r.artist)}</span></span>
         <span class="track-val track-val--when">${agoLabel(r.t)}</span></li>`).join('')}</ol>` : '<p class="no-data">Brak odsłuchów.</p>';
@@ -936,6 +943,189 @@
     document.getElementById('sheet-title').textContent = state.artist;
   }
 
+
+  // ─────────────────────────────────────────────────────── KARTA UTWORU / ALBUMU
+  /** Klik w utwór/album (wiersz z data-item) otwiera jego kartę. Zwraca true, gdy obsłużono. */
+  function pickItem(e) {
+    if (e.type === 'keydown' && e.key !== 'Enter') return false;
+    const el = e.target.closest('[data-item][data-key]');
+    if (!el) return false;
+    openItem(el.dataset.item, decodeURIComponent(el.dataset.key));
+    return true;
+  }
+  function openItem(kind, key) {
+    state.item = { kind, key };
+    state.itemUnit = null;
+    openSheet('item');
+    renderItem(true);
+  }
+  let itemCache = { rows: null, key: '', d: null };
+  function renderItem(fresh) {
+    const box = document.getElementById('item-card');
+    const { kind, key } = state.item;
+    if (itemCache.rows !== state.rows || itemCache.key !== `${kind}|${key}`) itemCache = { rows: state.rows, key: `${kind}|${key}`, d: A.itemDetails(state.rows, kind, key) };
+    const d = itemCache.d;
+    if (!d) { box.innerHTML = '<p class="no-data">Brak odsłuchów.</p>'; return; }
+    document.getElementById('sheet-title').textContent = d.name;
+    const { from: rf, to: rt } = currentBounds();
+    const inRange = sliceOf(d.rows, rf, rt);
+    const rs = A.summary(inRange, rf, rt);
+    const rankList = A.top(sliceOf(state.rows, rf, rt), kind, { sortBy: state.sortBy, limit: 0 });
+    const pos = rankList.findIndex((x) => x.key === key) + 1;
+    const when = state.range === 'year' ? `w ${state.year}` : RANGE_NAMES[state.range];
+    const from = A.bucketStart(d.first, 'day');
+    const to = A.bucketStart(state.rows[state.rows.length - 1].t, 'day') + 86_400_000;
+    const auto = to - from > 400 * 86_400_000 ? 'month' : to - from > 70 * 86_400_000 ? 'week' : 'day';
+    const unit = pickUnit(state.itemUnit || auto, from, to);
+    const title = kind === 'album' ? d.name : `${d.name} ${d.artist}`;
+    const fact = (dt, dd) => `<div><dt>${dt}</dt><dd>${dd}</dd></div>`;
+    box.innerHTML = `
+      <div class="item-head">
+        ${coverAvatar(title, d.artist, d.album, 'avatar--item')}
+        <div class="item-id">
+          <span class="item-kicker">${kind === 'album' ? 'Album' : 'Utwór'}</span>
+          <h3 class="artist-name item-name">${esc(d.name)}</h3>
+          <span class="item-links"><button type="button" class="link-chip" data-goto-artist="${esc(d.artist)}">${artistAvatar(d.artist, 'avatar--xs')}<span class="lc-t">${esc(d.artist)}</span></button>
+          ${kind === 'track' && d.album ? `<button type="button" class="link-chip" data-item="album" data-key="${encodeURIComponent(A.keyOf('album', d.rows[0]))}"><span class="lc-t">💿 ${esc(d.album)}</span></button>` : ''}</span>
+        </div>
+      </div>
+      <dl class="artist-facts item-facts">
+        ${fact('Łącznie', `${nf.format(minutes(d.ms))} min · ${nf.format(d.plays)}×`)}
+        ${fact(`Okres: ${when}`, rs.ms ? `${nf.format(minutes(rs.ms))} min · ${nf.format(rs.plays)}×${pos ? ` · <span class="item-pos">#${pos}</span>` : ''}` : '—')}
+        ${fact('Pierwszy odsłuch', fmtDate(d.first))}
+        ${fact('Ostatni odsłuch', fmtDate(d.last))}
+        ${d.bestDay ? fact('Najlepszy dzień', `${nf.format(d.bestDay.plays)}× · ${fmtDate(d.bestDay.day)}`) : ''}
+        ${fact('Dni ze słuchaniem', nf.format(d.days))}
+        ${fact('Pominięcia (&lt;30 s)', `${nf.format(d.skips)}${d.plays + d.skips ? ` <small>(${Math.round((d.skips / (d.plays + d.skips)) * 100)}%)</small>` : ''}`)}
+        ${kind === 'album' ? fact('Utwory', nf.format(d.tracks.length)) : ''}
+      </dl>
+      <div class="item-chart-head"><h4 class="sub-title">Słuchanie w czasie</h4>
+        <div class="seg seg--sm" id="item-unit" role="group" aria-label="Agregacja"><button type="button" data-unit="day">Dni</button><button type="button" data-unit="week">Tygodnie</button><button type="button" data-unit="month">Miesiące</button></div></div>
+      <div id="item-chart"></div>
+      ${kind === 'album' ? `<h4 class="sub-title">Utwory z albumu (cały czas)</h4><div id="item-tracks">${trackList(d.tracks.slice(0, 30), 'track')}</div>` : ''}`;
+    syncSeg('item-unit', 'unit', unit, allowedUnits(from, to));
+    const tl = A.timeline(d.rows, from, to, unit, [{ key: d.name, match: () => true }]);
+    C.lineChart(document.getElementById('item-chart'), { buckets: tl.buckets, unit, area: true, series: [{ name: d.name, color: SPOTIFY_GREEN, values: tl.series[0].values }] });
+    if (fresh) enter(box, `${kind}|${key}|${Date.now()}`);
+  }
+  function wireItem() {
+    const box = document.getElementById('item-card');
+    box.addEventListener('click', (e) => {
+      const a = e.target.closest('[data-goto-artist]');
+      if (a) { selectArtist(a.dataset.gotoArtist, true); return; }
+      const u = e.target.closest('#item-unit button');
+      if (u && !u.disabled) { state.itemUnit = u.dataset.unit; renderItem(); return; }
+      pickItem(e);
+    });
+    box.addEventListener('keydown', pickItem);
+  }
+
+  // ─────────────────────────────────────────────────────── TY I ZNAJOMY
+  /** Inne konta z danymi (na GitHubie albo w tej przeglądarce). Przy jednym koncie sekcji nie ma. */
+  function friendSlots() {
+    return [1, 2, 3, 4, 5].filter((n) => n !== state.slot && (slotHasData(n) || localSlots.has(n)));
+  }
+  async function loadFriendRows(slot) {
+    let exp = [];
+    let stored = null;
+    try { stored = await loadData(slot); } catch { /* brak IndexedDB */ }
+    if (stored && stored.rows && !(stored.meta && stored.meta.demo)) exp = stored.rows;
+    const L = window.SpotiLive;
+    const acc = accountOf(slot);
+    if (L && acc.export && (!exp.length || acc.export.importedAt > ((stored && stored.meta && stored.meta.importedAt) || 0) + 1000)) {
+      try { exp = await L.loadExportRows(acc); } catch { /* zostaje lokalny */ }
+    }
+    let live = state.liveCache.get(slot) || [];
+    if (L && !live.length && acc.files && acc.files.length) {
+      try { live = A.normalizeRows(await L.loadRows(acc)).rows; state.liveCache.set(slot, live); } catch { /* bez automatu */ }
+    }
+    const end = exp.length ? exp[exp.length - 1].t : -Infinity;
+    return exp.concat(live.filter((r) => r.t > end));
+  }
+  function friendRowsOf(slot) {
+    const got = state.friendRows.get(slot);
+    if (Array.isArray(got)) return got;
+    if (!got) {
+      state.friendRows.set(slot, loadFriendRows(slot).then((rows) => { state.friendRows.set(slot, rows); scheduleRender(); }, () => state.friendRows.set(slot, [])));
+    }
+    return null;
+  }
+  function renderFriend(slice, from, to) {
+    const sec = document.getElementById('sec-friend');
+    const slots = isDemo() ? [] : friendSlots();
+    sec.classList.toggle('hidden', !slots.length);
+    document.getElementById('side-friend').classList.toggle('hidden', !slots.length);
+    if (!slots.length) return;
+    if (!slots.includes(state.friend)) state.friend = slots[0];
+    const f = state.friend;
+    const pick = document.getElementById('friend-pick');
+    pick.classList.toggle('hidden', slots.length < 2);
+    pick.innerHTML = slots.map((n) => `<button type="button" data-friend="${n}" class="${n === f ? 'is-active' : ''}" aria-pressed="${n === f}">${esc(accountName(n) || `Konto ${n}`)}</button>`).join('');
+    const body = document.getElementById('friend-body');
+    const rows = friendRowsOf(f);
+    const meName = accountName(state.slot) || 'Ty';
+    const frName = accountName(f) || `Konto ${f}`;
+    if (!rows) { body.innerHTML = `<p class="no-data">Wczytuję historię: ${esc(frName)}…</p>`; return; }
+    const other = sliceOf(rows, from, to);
+    if (!other.length) { body.innerHTML = `<p class="no-data">${esc(frName)} nie ma odsłuchów w tym okresie.</p>`; return; }
+    const c = A.compareUsers(slice, other, { limit: 8 });
+    const duel = (label, a, b, fmt) => {
+      const tot = a + b || 1;
+      return `<div class="duel"><div class="duel__label">${label}</div>
+        <div class="duel__vals"><b class="${a >= b ? 'is-win' : ''}">${fmt(a)}</b><b class="${b > a ? 'is-win' : ''}">${fmt(b)}</b></div>
+        <div class="duel__bar"><span style="width:${(a / tot) * 100}%"></span><span style="width:${(b / tot) * 100}%"></span></div></div>`;
+    };
+    const minFmt = (v) => `${nf.format(minutes(v))} min`;
+    const share = (x) => `${Math.round(x * 1000) / 10}%`;
+    const maxOf = (list) => Math.max(1e-9, ...list.map((x) => Math.max(x.a.share, x.b.share)));
+    const scaleA = maxOf(c.artists), scaleT = maxOf(c.tracks);
+    const row = (it, kind) => `<li class="fr-row" ${kind === 'artist' ? `data-artist="${esc(it.name)}"` : `data-artist="${esc(it.artist)}" data-item="track" data-key="${encodeURIComponent(it.key)}"`} tabindex="0" role="button">
+        ${kind === 'artist' ? artistAvatar(it.name, 'avatar--cover avatar--round') : coverAvatar(`${it.name} ${it.artist}`, it.artist, it.album, 'avatar--cover')}
+        <span class="track-text"><span class="track-name">${esc(it.name)}</span>${kind === 'track' ? `<span class="track-sub">${esc(it.artist)}</span>` : ''}
+          <span class="fr-bars"><span class="fr-bar fr-bar--a" style="--w:${(it.a.share / (kind === 'artist' ? scaleA : scaleT)) * 100}%"></span><span class="fr-bar fr-bar--b" style="--w:${(it.b.share / (kind === 'artist' ? scaleA : scaleT)) * 100}%"></span></span></span>
+        <span class="fr-vals"><span class="fr-a">${minFmt(it.a.ms)}</span><span class="fr-b">${minFmt(it.b.ms)}</span></span></li>`;
+    const verdict = c.score >= 60 ? 'Bardzo podobny gust' : c.score >= 35 ? 'Sporo wspólnego' : c.score >= 15 ? 'Trochę wspólnego' : 'Zupełnie inne klimaty';
+    body.innerHTML = `
+      <div class="fr-top">
+        <div class="fr-people">
+          <span class="fr-person">${accountAvatar(state.slot, meName, 'avatar--lg')}<span>${esc(meName)}</span></span>
+          <span class="fr-score" style="--p:${c.score}"><b>${c.score}%</b><small>zgodności</small></span>
+          <span class="fr-person">${accountAvatar(f, frName, 'avatar--lg')}<span>${esc(frName)}</span></span>
+        </div>
+        <p class="fr-verdict">${verdict} · ${nf.format(c.sharedArtists)} wspólnych wykonawców</p>
+        <div class="duels">
+          ${duel('Minuty', slice.length ? c.a.ms : 0, c.b.ms, minFmt)}
+          ${duel('Odtworzenia', c.a.plays, c.b.plays, (v) => nf.format(v))}
+          ${duel('Wykonawcy', c.a.artists, c.b.artists, (v) => nf.format(v))}
+        </div>
+      </div>
+      <div class="fr-lists">
+        <div><h3 class="sub-title">Wspólni wykonawcy <span class="fr-key"><i class="fr-a"></i>${esc(meName)} <i class="fr-b"></i>${esc(frName)}</span></h3>
+          ${c.artists.length ? `<ol class="fr-list">${c.artists.map((x) => row(x, 'artist')).join('')}</ol>` : '<p class="no-data">Brak wspólnych wykonawców.</p>'}</div>
+        <div><h3 class="sub-title">Wspólne utwory</h3>
+          ${c.tracks.length ? `<ol class="fr-list">${c.tracks.map((x) => row(x, 'track')).join('')}</ol>` : '<p class="no-data">Brak wspólnych utworów.</p>'}</div>
+      </div>`;
+    enter(body, `${dataSig()}|${f}`);
+  }
+  function wireFriend() {
+    document.getElementById('friend-pick').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-friend]');
+      if (!b) return;
+      state.friend = Number(b.dataset.friend);
+      const { from, to } = currentBounds();
+      renderFriend(sliceOf(state.rows, from, to), from, to);
+    });
+    const body = document.getElementById('friend-body');
+    const go = (e) => {
+      if (pickItem(e)) return;
+      if (e.type === 'keydown' && e.key !== 'Enter') return;
+      const el = e.target.closest('[data-artist]');
+      if (el) selectArtist(el.dataset.artist, true);
+    };
+    body.addEventListener('click', go);
+    body.addEventListener('keydown', go);
+  }
+
   // ─────────────────────────────────────────────────────── INTERAKCJE: legendy, porównanie, słupki
   /** Przeliczenie z krótkim przygaszeniem treści — zmiana okresu/sortowania wygląda płynnie, nie „skacze”. */
   function switchRender() {
@@ -966,6 +1156,7 @@
 
     const body = document.getElementById('artist-body');
     body.addEventListener('click', (e) => {
+      if (pickItem(e)) return;
       const add = e.target.closest('[data-add]');
       if (add) { addCompare(add.dataset.add); return; }
       const b = e.target.closest('.legend-item');
@@ -1133,13 +1324,24 @@
   let sheetPushed = false;
   let sheetReturnFocus = null;
   const sheetOpen = () => !document.getElementById('artist-sheet').classList.contains('hidden');
-  function openSheet() {
-    const sheet = document.getElementById('artist-sheet');
+  /** Okno pokazuje kartę wykonawcy (przeniesioną ze strony) albo kartę utworu/albumu. */
+  function sheetMode(mode) {
     const card = document.getElementById('artist-card');
-    if (sheetOpen()) { document.getElementById('sheet-slot').scrollTop = 0; return; }
+    const slot = document.getElementById('sheet-slot');
+    if (mode === 'artist') {
+      if (!sheetHome) { sheetHome = document.createElement('div'); sheetHome.id = 'artist-card-home'; card.before(sheetHome); }
+      slot.appendChild(card);
+      document.getElementById('sheet-title').textContent = state.artist;
+    } else if (sheetHome) { sheetHome.replaceWith(card); sheetHome = null; }
+    document.getElementById('item-card').classList.toggle('hidden', mode !== 'item');
+    state.sheetMode = mode;
+    slot.scrollTop = 0;
+  }
+  function openSheet(mode = 'artist') {
+    const sheet = document.getElementById('artist-sheet');
+    if (sheetOpen()) { sheetMode(mode); return; }
     sheetReturnFocus = document.activeElement;
-    if (!sheetHome) { sheetHome = document.createElement('div'); sheetHome.id = 'artist-card-home'; card.before(sheetHome); }
-    document.getElementById('sheet-slot').appendChild(card);
+    sheetMode(mode);
     sheet.classList.remove('hidden');
     document.body.classList.add('sheet-open');
     requestAnimationFrame(() => sheet.classList.add('is-open'));
@@ -1158,6 +1360,8 @@
       sheet.classList.add('hidden');
       if (sheetHome) sheetHome.replaceWith(document.getElementById('artist-card'));
       sheetHome = null;
+      document.getElementById('item-card').classList.add('hidden');
+      state.sheetMode = null;
       if (state.rows.length) { const { from, to } = currentBounds(); renderArtist(from, to); }
       if (sheetReturnFocus && document.contains(sheetReturnFocus)) sheetReturnFocus.focus({ preventScroll: true });
     };
@@ -1405,6 +1609,7 @@
     });
 
     const onArtistPick = (e) => {
+      if (pickItem(e)) return;
       const el = e.target.closest('[data-artist]');
       if (el) selectArtist(el.dataset.artist, true);
     };
@@ -1429,6 +1634,7 @@
       renderRecords();
     });
     document.getElementById('records-body').addEventListener('click', (e) => {
+      if (pickItem(e)) return;
       const el = e.target.closest('[data-artist]');
       if (el) selectArtist(el.dataset.artist, true);
     });
@@ -1481,6 +1687,8 @@
     wireMenu();
     wireSheet();
     wireProfile();
+    wireItem();
+    wireFriend();
     wireInteractive();
   }
 
@@ -1775,6 +1983,11 @@
     if (!state.profile) showWho();
     await loadSlot(state.slot);
     loadAccounts();
+    // Konta zapisane tylko w tej przeglądarce (do „Ty i znajomy”) — same klucze, bez wczytywania danych.
+    idb('readonly', (st) => st.getAllKeys()).then((keys) => {
+      for (const k of keys || []) { const n = k === 'me' ? 1 : Number(String(k).replace('konto-', '')); if (n >= 1 && n <= 5) localSlots.add(n); }
+      if (state.rows.length) render();
+    }).catch(() => {});
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
