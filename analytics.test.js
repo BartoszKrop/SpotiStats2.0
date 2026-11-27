@@ -233,3 +233,31 @@ test('rankSeries: pozycje w każdym okresie, „dalej” i lider', () => {
   assert.strictEqual(r.leaders[1].name, 'B');
   assert.strictEqual(r.leaders[2], null);
 });
+
+test('itemDetails: utwór i album — suma, pominięcia, najlepszy dzień', () => {
+  const day = 86_400_000;
+  const base = Date.UTC(2025, 0, 6, 12);
+  const row = (t, track, ms, album = 'Alb', artist = 'X') => ({ t, track, artist, album, ms });
+  const rows = [row(base, 'A', 200_000), row(base + 1000, 'A', 5_000), row(base + day, 'A', 180_000), row(base + day + 10, 'A', 180_000), row(base + day + 20, 'B', 100_000)];
+  const key = A.keyOf('track', rows[0]);
+  const t = A.itemDetails(rows, 'track', key);
+  assert.equal(t.name, 'A');
+  assert.equal(t.plays, 3);
+  assert.equal(t.skips, 1);
+  assert.equal(t.bestDay.plays, 2);
+  assert.equal(t.first, base);
+  const al = A.itemDetails(rows, 'album', A.keyOf('album', rows[0]));
+  assert.equal(al.tracks.length, 2);
+  assert.equal(A.itemDetails(rows, 'track', 'nie ma'), null);
+});
+
+test('compareUsers: zgodność 100 dla identycznych, 0 dla rozłącznych', () => {
+  const r = (artist, ms) => ({ t: 1, track: `${artist} t`, artist, album: 'a', ms });
+  const a = [r('P', 60_000), r('Q', 60_000)];
+  assert.equal(A.compareUsers(a, a).score, 100);
+  assert.equal(A.compareUsers(a, [r('Z', 60_000)]).score, 0);
+  const c = A.compareUsers(a, [r('P', 60_000), r('Z', 60_000)]);
+  assert.equal(c.score, 50);
+  assert.equal(c.sharedArtists, 1);
+  assert.equal(c.artists[0].name, 'P');
+});
