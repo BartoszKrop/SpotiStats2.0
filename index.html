@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=24" />
+    <link rel="stylesheet" href="./styles.css?v=25" />
   </head>
   <body>
     <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -33,6 +33,17 @@
         <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       </defs>
     </svg>
+    <!-- ─── KTO SŁUCHA? (wybór konta) ─────────────────────── -->
+    <section id="who" class="who hidden" aria-labelledby="who-title">
+      <div class="who-inner">
+        <span class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg></span><span class="brand-name">SpotiStats</span></span>
+        <h1 id="who-title" class="who-title">Kto słucha?</h1>
+        <ul id="who-list" class="who-list"></ul>
+        <p id="who-loading" class="who-loading hidden"><span class="spinner spinner--sm" aria-hidden="true"></span>Wczytuję konta…</p>
+        <p class="who-note">Wybierz swoje konto. Zapamiętam wybór na tym urządzeniu — wrócisz tu przez „Zmień konto”.</p>
+      </div>
+    </section>
+
     <div class="layout">
       <!-- ─── PASEK BOCZNY ─────────────────────────────────── -->
       <aside class="sidebar" aria-label="Nawigacja">
@@ -52,7 +63,7 @@
         </nav>
 
         <div class="side-section">
-          <h2 class="side-title">Konta</h2>
+          <h2 class="side-title">Zalogowano</h2>
           <ul id="account-list" class="account-list" aria-label="Czyje statystyki"></ul>
         </div>
       </aside>
@@ -74,6 +85,7 @@
                 <input id="reimport-files" type="file" accept=".zip,.json,application/json,application/zip" multiple class="sr-only" tabindex="-1" />
               </label>
               <a class="menu-item" role="menuitem" href="./spotify.html"><svg class="ico" aria-hidden="true"><use href="#i-sync"/></svg><span>Automat Spotify<small>dociąganie nowych odsłuchów</small></span></a>
+              <button class="menu-item" type="button" role="menuitem" data-logout><svg class="ico" aria-hidden="true"><use href="#i-user"/></svg><span>Zmień konto<small>wyloguj i wróć do wyboru osoby</small></span></button>
               <button id="btn-clear-data" class="menu-item menu-item--danger" type="button" role="menuitem"><svg class="ico" aria-hidden="true"><use href="#i-trash"/></svg><span>Usuń eksport z przeglądarki</span></button>
             </div>
           </div>
@@ -97,7 +109,7 @@
             <input id="cloud-token" class="field-input" type="password" placeholder="github_pat_…" autocomplete="off" spellcheck="false" />
           </div>
           <div id="cloud-name-box" class="cloud-name hidden">
-            <label for="cloud-name">Nazwa tego konta w pasku bocznym</label>
+            <label for="cloud-name">Imię widoczne na ekranie „Kto słucha?”</label>
             <input id="cloud-name" class="field-input" type="text" maxlength="40" placeholder="np. Kasia" autocomplete="off" />
           </div>
           <div class="cloud-actions">
@@ -132,6 +144,7 @@
             <p id="import-status" class="import-status" role="status" aria-live="polite"></p>
             <div id="friend-help" class="friend-help hidden"></div>
             <button id="btn-load-demo" class="btn btn--ghost btn--sm" type="button">Pokaż na danych przykładowych</button>
+            <button class="btn btn--ghost btn--sm" type="button" data-logout>← Wróć do wyboru konta</button>
             <p class="import-note">Eksport zostaje w tej przeglądarce i wczytuje się sam przy każdym wejściu — wgrywasz go tylko raz. Eksport nigdzie nie jest wysyłany. Jedynie nazwy wykonawców i albumów trafiają do publicznego API Deezera, by pobrać zdjęcia i okładki.</p>
             <p class="import-note">Wskazówka: otwórz stronę w zwykłej przeglądarce (Safari / Chrome), a nie z okienka innej aplikacji, i dodaj ją do ekranu głównego — wtedy dane na pewno zostają.</p>
           </div>
@@ -300,11 +313,11 @@
     </div>
 
     <script src="./jszip.min.js"></script>
-    <script src="./analytics.js?v=24"></script>
-    <script src="./charts.js?v=24"></script>
-    <script src="./art.js?v=24"></script>
-    <script src="./cloud.js?v=24"></script>
-    <script src="./live.js?v=24"></script>
-    <script src="./app.js?v=24"></script>
+    <script src="./analytics.js?v=25"></script>
+    <script src="./charts.js?v=25"></script>
+    <script src="./art.js?v=25"></script>
+    <script src="./cloud.js?v=25"></script>
+    <script src="./live.js?v=25"></script>
+    <script src="./app.js?v=25"></script>
   </body>
 </html>

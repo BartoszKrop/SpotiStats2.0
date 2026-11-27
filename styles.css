@@ -654,3 +654,42 @@ body.sheet-open { overflow: hidden; }
   .chart-series.is-entering .chart-line { stroke-dasharray: none; stroke-dashoffset: 0; }
   .state-data > * { transition: none !important; }
 }
+
+/* ══ Kto słucha? (wybór konta) ══ */
+.who {
+  position: fixed; inset: 0; z-index: 200; overflow-y: auto; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem calc(2rem + env(safe-area-inset-bottom));
+  background: radial-gradient(120% 80% at 50% 0%, #1d3a29 0%, #121212 55%, #000 100%); animation: fade-in 0.25s both;
+}
+.who.is-leaving { opacity: 0; transform: scale(1.03); transition: opacity 0.22s, transform 0.22s; }
+.who-inner { width: min(760px, 100%); display: flex; flex-direction: column; align-items: center; gap: 1.5rem; text-align: center; }
+.who .brand { padding: 0; }
+.who-title { font-size: clamp(2rem, 6vw, 3.2rem); font-weight: 900; letter-spacing: -0.03em; }
+.who-list { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; }
+.who-card {
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem; width: 140px; padding: 1rem 0.5rem; border: none; border-radius: 12px;
+  background: transparent; cursor: pointer; transition: background 0.2s, transform 0.15s;
+}
+.who-card:hover, .who-card:focus-visible { background: rgba(255, 255, 255, 0.07); outline: none; }
+.who-card:active { transform: scale(0.96); }
+.avatar--who { width: 104px; height: 104px; font-size: 2.3rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s; }
+.who-card:hover .avatar--who { transform: translateY(-4px) scale(1.04); box-shadow: 0 0 0 3px var(--green), 0 16px 34px rgba(0, 0, 0, 0.55); }
+.who-card--add .avatar--who { background: transparent; box-shadow: inset 0 0 0 2px #535353; font-size: 2.4rem; }
+.who-name { font-weight: 800; font-size: 1.05rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who-sub { font-size: 0.78rem; color: var(--text-2); }
+.who-note { font-size: 0.8rem; color: var(--text-3); max-width: 420px; }
+.who-loading { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; color: var(--text-2); }
+.spinner--sm { width: 18px; height: 18px; border-width: 2px; }
+.who-list li { animation: rise 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.who-list li:nth-child(2) { animation-delay: 40ms; } .who-list li:nth-child(3) { animation-delay: 80ms; }
+.who-list li:nth-child(4) { animation-delay: 120ms; } .who-list li:nth-child(5) { animation-delay: 160ms; } .who-list li:nth-child(6) { animation-delay: 200ms; }
+body.who-open { overflow: hidden; }
+@media (max-width: 600px) {
+  .who-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; width: 100%; max-width: 340px; }
+  .who-card { width: 100%; }
+  .avatar--who { width: 92px; height: 92px; font-size: 2rem; }
+}
+
+/* Zalogowane konto w pasku bocznym / nagłówku */
+.account-switch { margin-left: auto; font-size: 0.75rem; font-weight: 700; color: var(--text-2); border: 1px solid #535353; border-radius: 999px; padding: 0.2rem 0.6rem; }
+.account:hover .account-switch { color: var(--text); border-color: #fff; }
+@media (max-width: 900px) { .account-switch { display: none; } }

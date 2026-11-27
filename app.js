@@ -15,6 +15,7 @@
   const IDB_VERSION = 2;
   const IDB_STORE = 'history';
   const PREFS_KEY = 'ss_prefs';
+  const PROFILE_KEY = 'ss_profile'; // zalogowane konto (wybór na ekranie „Kto słucha?”)
   /** Konto nr 1 zostaje pod starym kluczem, żeby nie zgubić wczytanego już eksportu. */
   const idbKey = (slot) => (slot === 1 ? 'me' : `konto-${slot}`);
   const SPOTIFY_GREEN = '#1ed760';
@@ -56,6 +57,7 @@
     compare: [], // dodatkowi wykonawcy na wykresie w karcie wykonawcy
     compareHidden: new Set(), // null = automatycznie (tygodnie do roku, dłużej miesiące)
     slot: 1,
+    profile: null, // zalogowane konto; null = pokaż ekran wyboru
     accounts: null, // z konta.json (null = jeszcze nie wczytane / brak sieci)
     liveCache: new Map(), // slot -> znormalizowane wiersze z automatu
     images: new Map(), // nazwa wykonawcy małymi literami -> url zdjęcia (z automatu)
@@ -67,8 +69,11 @@
     try {
       const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
       for (const k of ['range', 'year', 'sortBy', 'topKind', 'artist', 'slot']) if (p[k] != null) state[k] = p[k];
+      const prof = Number(localStorage.getItem(PROFILE_KEY));
+      state.profile = prof >= 1 && prof <= 5 ? prof : null;
       const q = Number(new URLSearchParams(location.search).get('konto'));
-      if (q >= 1 && q <= 5) state.slot = q;
+      if (q >= 1 && q <= 5) { state.profile = q; localStorage.setItem(PROFILE_KEY, String(q)); }
+      if (state.profile) state.slot = state.profile;
     } catch { /* brak dostępu do localStorage — trudno */ }
   }
   function savePrefs() {
@@ -346,23 +351,72 @@
     return Boolean(accountOf(slot).connectedAt || accountOf(slot).export) || slot === state.slot && state.exportRows.length > 0;
   }
 
+  /** Pasek boczny / nagłówek: tylko zalogowana osoba; klik = zmiana konta (ekran „Kto słucha?”). */
   function renderAccounts() {
     const list = document.getElementById('account-list');
-    const items = [];
-    // Puste miejsca zwinięte do jednego „Dodaj konto” (pierwsze wolne) — chyba że właśnie oglądasz puste.
-    const firstFree = [1, 2, 3, 4, 5].find((n) => !accountName(n));
-    for (let slot = 1; slot <= 5; slot++) {
-      const name = accountName(slot);
-      const a = accountOf(slot);
-      const active = slot === state.slot;
-      if (!name && !active && (slot !== firstFree || !accountName(state.slot))) continue;
-      const sub = a.connectedAt ? (a.error ? 'automat: błąd' : 'automat działa') : a.export ? 'eksport na GitHubie' : name ? 'tylko eksport' : 'znajomy albo drugie konto';
-      items.push(`<li><button type="button" class="account${active ? ' is-active' : ''}${name ? '' : ' is-empty'}" data-slot="${slot}" aria-current="${active}">
-        ${name ? avatar(name, 'avatar--sm') : '<span class="avatar avatar--sm avatar--empty" aria-hidden="true">+</span>'}
-        <span class="account-text"><span class="account-name">${esc(name || (active ? `Miejsce ${slot}` : 'Dodaj konto'))}</span><span class="account-sub">${sub}</span></span>
-      </button></li>`);
-    }
-    list.innerHTML = items.join('');
+    const slot = state.slot;
+    const name = accountName(slot) || `Nowa osoba`;
+    const a = accountOf(slot);
+    const sub = a.connectedAt ? (a.error ? 'automat: błąd' : 'automat działa') : a.export ? 'eksport na GitHubie' : state.exportRows.length ? 'eksport w tej przeglądarce' : 'brak danych';
+    list.innerHTML = `<li><button type="button" class="account is-active" data-logout title="Zmień konto / wyloguj">
+        ${accountName(slot) ? avatar(name, 'avatar--sm') : '<span class="avatar avatar--sm avatar--empty" aria-hidden="true">+</span>'}
+        <span class="account-text"><span class="account-name">${esc(name)}</span><span class="account-sub">${sub}</span></span>
+        <span class="account-switch" aria-hidden="true">Zmień</span>
+      </button></li>`;
+  }
+
+  // ─────────────────────────────────────────────────────── KTO SŁUCHA? (wybór konta)
+  let localSlots = new Set();
+  async function scanLocalSlots() {
+    const found = new Set();
+    await Promise.all([1, 2, 3, 4, 5].map(async (n) => {
+      try { const d = await loadData(n); if (d && d.rows && d.rows.length && !(d.meta && d.meta.demo)) found.add(n); } catch { /* brak IndexedDB */ }
+    }));
+    localSlots = found;
+  }
+  function whoSlots() {
+    return [1, 2, 3, 4, 5].filter((n) => accountName(n) || localSlots.has(n) || n === 1);
+  }
+  function renderWho() {
+    const el = document.getElementById('who');
+    if (!el || el.classList.contains('hidden')) return;
+    const slots = whoSlots();
+    const free = [1, 2, 3, 4, 5].find((n) => !slots.includes(n));
+    const people = slots.map((n) => {
+      const name = accountName(n) || (n === 1 ? 'Ty' : `Konto ${n}`);
+      const a = accountOf(n);
+      const sub = a.connectedAt ? 'automat działa' : a.export || localSlots.has(n) ? 'eksport' : 'brak danych';
+      return `<li><button type="button" class="who-card" data-login="${n}">${avatar(name, 'avatar--who')}<span class="who-name">${esc(name)}</span><span class="who-sub">${sub}</span></button></li>`;
+    });
+    if (free) people.push(`<li><button type="button" class="who-card who-card--add" data-login="${free}"><span class="avatar avatar--who avatar--empty" aria-hidden="true">+</span><span class="who-name">Dodaj osobę</span><span class="who-sub">wolne miejsce ${free} z 5</span></button></li>`);
+    document.getElementById('who-list').innerHTML = people.join('');
+    document.getElementById('who-loading').classList.toggle('hidden', !state.booting);
+  }
+  function showWho() {
+    closeMenu();
+    if (sheetOpen()) closeSheet(true);
+    document.getElementById('who').classList.remove('hidden');
+    document.body.classList.add('who-open');
+    window.scrollTo(0, 0);
+    renderWho();
+    scanLocalSlots().then(renderWho);
+  }
+  function login(slot) {
+    state.profile = slot;
+    try { localStorage.setItem(PROFILE_KEY, String(slot)); } catch { /* ignoruj */ }
+    const who = document.getElementById('who');
+    who.classList.add('is-leaving');
+    setTimeout(() => { who.classList.add('hidden'); who.classList.remove('is-leaving'); document.body.classList.remove('who-open'); }, reduceMotion() ? 0 : 220);
+    state.compare = [];
+    state.kingsHidden.clear();
+    setCloudMsg('');
+    if (slot !== state.slot || !state.rows.length) loadSlot(slot); else render();
+  }
+  function logout() {
+    state.profile = null;
+    try { localStorage.removeItem(PROFILE_KEY); } catch { /* ignoruj */ }
+    if (new URLSearchParams(location.search).has('konto')) history.replaceState(null, '', location.pathname);
+    showWho();
   }
 
   // ─────────────────────────────────────────────────────── RENDER
@@ -1140,12 +1194,10 @@
       render();
     });
 
-    document.getElementById('account-list').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-slot]');
-      if (!b) return;
-      const slot = Number(b.dataset.slot);
-      if (slot !== state.slot) loadSlot(slot);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('[data-logout]')) { logout(); return; }
+      const b = e.target.closest('[data-login]');
+      if (b) login(Number(b.dataset.login));
     });
 
     document.addEventListener('click', async (e) => {
@@ -1210,7 +1262,7 @@
     const free = !accountName(slot);
     document.getElementById('empty-title').textContent = slot === 1
       ? 'Wczytaj swoją historię ze Spotify'
-      : free ? `Wolne miejsce nr ${slot}` : `Wczytaj eksport: ${accountName(slot)}`;
+      : free ? `Nowa osoba (miejsce ${slot})` : `Wczytaj eksport: ${accountName(slot)}`;
     const help = document.getElementById('friend-help');
     help.classList.toggle('hidden', slot === 1);
     if (slot === 1) return;
@@ -1262,11 +1314,13 @@
       state.accounts = null;
       state.booting = false;
       render();
+      renderWho();
       return;
     }
     state.booting = false;
     maybeLoadCloudExport(state.slot);
     render();
+    renderWho();
     loadLiveFor(state.slot);
     try {
       state.images = await L.loadArtistImages();
@@ -1349,7 +1403,7 @@
     document.getElementById('cloud-token-box').classList.toggle('hidden', Boolean(token));
     document.getElementById('cloud-forget').classList.toggle('hidden', !token);
     document.getElementById('cloud-remove').classList.toggle('hidden', !acc.export);
-    document.getElementById('cloud-name-box').classList.toggle('hidden', state.slot === 1);
+    document.getElementById('cloud-name-box').classList.remove('hidden');
     const nameEl = document.getElementById('cloud-name');
     if (nameEl && document.activeElement !== nameEl && !nameEl.value) nameEl.value = acc.name || '';
     document.getElementById('cloud-send').disabled = state.cloudBusy || !hasExport();
@@ -1377,7 +1431,7 @@
     if (!token) { setCloudMsg('Wklej najpierw token z GitHuba (instrukcja powyżej).', true); return; }
     if (!window.SpotiCloud) { setCloudMsg('Brak modułu zapisu (cloud.js).', true); return; }
     const slot = state.slot;
-    const name = slot === 1 ? (accountOf(1).name || null) : (document.getElementById('cloud-name').value.trim() || accountOf(slot).name || null);
+    const name = document.getElementById('cloud-name').value.trim() || accountOf(slot).name || null;
     const importedAt = (state.meta && state.meta.importedAt) || Date.now();
     state.cloudBusy = true;
     renderCloud();
@@ -1476,6 +1530,7 @@
     wireScrollSpy();
     wireCloud();
     renderAccounts();
+    if (!state.profile) showWho();
     await loadSlot(state.slot);
     loadAccounts();
   }
