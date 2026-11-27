@@ -13,6 +13,8 @@ Statystyki słuchania Spotify w stylu stats.fm, liczone z **pełnego eksportu hi
 - **Nr 1 tygodnia** — kto był najczęściej słuchanym wykonawcą w każdym tygodniu (albo miesiącu), wykres pozycji w rankingu i licznik tygodni na szczycie.
 - **5 kont** — Ty + 4 znajomych (limit Spotify dla prywatnych aplikacji). Każde konto ma osobny eksport w przeglądarce i osobny automat.
 - **Wykonawca w czasie** — wykres dowolnego wykonawcy (wyszukiwarka albo klik w topce), cały czas lub wybrany zakres, do tego jego najczęściej słuchane utwory.
+- **Karta wykonawcy** — klik w dowolnego wykonawcę (topka, utwór, rekord) otwiera jego kartę na wierzchu; gest/przycisk „wstecz” ją zamyka.
+- Na telefonie: okresy w dolnym pasku pod kciukiem, top wykonawcy jako przesuwana karuzela, utwory/albumy w zakładkach, opcje konta (zapis na GitHubie, nowszy eksport, automat) w menu „⋯”.
 - Podcasty, audiobooki i wpisy bez wykonawcy są **pomijane**. Duplikaty z nakładających się plików są usuwane.
 - „Odtworzenie” liczy się od 30 s słuchania (jak w stats.fm); minuty liczą się zawsze.
 

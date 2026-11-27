@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=22" />
+    <link rel="stylesheet" href="./styles.css?v=23" />
   </head>
   <body>
     <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -25,6 +25,12 @@
         <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 20c1-4 4-6 8-6s7 2 8 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
         <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3l10 18H2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v5M12 18v.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
         <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.5-9A6 6 0 0 1 18 10a4 4 0 0 1-.5 8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+        <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="19" cy="12" r="2" fill="currentColor"/></symbol>
+        <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+        <symbol id="i-sync" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+        <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+        <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       </defs>
     </svg>
     <div class="layout">
@@ -61,12 +67,15 @@
             <p id="hero-sub" class="hero-sub"></p>
           </div>
           <div class="hero-actions" id="topbar-actions">
-            <button id="btn-cloud" class="btn btn--outline btn--sm" type="button" title="Zapisz eksport na GitHubie, żeby był na każdym urządzeniu"><svg class="ico ico--sm" aria-hidden="true"><use href="#i-cloud"/></svg>Zapisz na GitHubie</button>
-            <label class="btn btn--outline btn--sm" title="Dodaj nowszy eksport Spotify — dołoży się do dotychczasowych danych, bez dublowania">
-              ↺ Dodaj nowszy eksport
-              <input id="reimport-files" type="file" accept=".zip,.json,application/json,application/zip" multiple class="sr-only" />
-            </label>
-            <button id="btn-clear-data" class="btn btn--ghost btn--sm" type="button" title="Usuń eksport tego konta z przeglądarki">Usuń eksport</button>
+            <button id="btn-menu" class="icon-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="hero-menu" title="Więcej opcji"><svg class="ico" aria-hidden="true"><use href="#i-more"/></svg><span class="sr-only">Więcej opcji</span></button>
+            <div id="hero-menu" class="menu hidden" role="menu" aria-label="Opcje konta">
+              <button id="btn-cloud" class="menu-item" type="button" role="menuitem"><svg class="ico" aria-hidden="true"><use href="#i-cloud"/></svg><span>Zapisz na GitHubie<small>żeby eksport był na każdym urządzeniu</small></span></button>
+              <label class="menu-item" role="menuitem" tabindex="0"><svg class="ico" aria-hidden="true"><use href="#i-upload"/></svg><span>Dodaj nowszy eksport<small>dołoży się bez dublowania</small></span>
+                <input id="reimport-files" type="file" accept=".zip,.json,application/json,application/zip" multiple class="sr-only" tabindex="-1" />
+              </label>
+              <a class="menu-item" role="menuitem" href="./spotify.html"><svg class="ico" aria-hidden="true"><use href="#i-sync"/></svg><span>Automat Spotify<small>dociąganie nowych odsłuchów</small></span></a>
+              <button id="btn-clear-data" class="menu-item menu-item--danger" type="button" role="menuitem"><svg class="ico" aria-hidden="true"><use href="#i-trash"/></svg><span>Usuń eksport z przeglądarki</span></button>
+            </div>
           </div>
         </header>
 
@@ -99,6 +108,12 @@
           <p id="cloud-status" class="cloud-status" role="status" aria-live="polite"></p>
         </section>
 
+        <!-- ─── ŁADOWANIE ────────────────────────────────────── -->
+        <section id="state-loading" class="state-loading hidden" aria-live="polite">
+          <span class="spinner" aria-hidden="true"></span>
+          <p id="loading-text">Wczytuję Twoją historię…</p>
+        </section>
+
         <!-- ─── IMPORT / PUSTE KONTO ─────────────────────────── -->
         <section id="state-empty" class="state-empty hidden">
           <div class="import-hero">
@@ -127,34 +142,50 @@
           <div class="toolbar" role="group" aria-label="Zakres i sortowanie">
             <div class="chips" id="range-pills">
               <button class="chip" data-range="7d" type="button">7 dni</button>
-              <button class="chip" data-range="28d" type="button">28 dni</button>
-              <button class="chip" data-range="6m" type="button">Pół roku</button>
+              <button class="chip" data-range="28d" type="button"><span class="lbl-long">28 dni</span><span class="lbl-short">4 tyg.</span></button>
+              <button class="chip" data-range="6m" type="button"><span class="lbl-long">Pół roku</span><span class="lbl-short">6 mies.</span></button>
               <span class="chip chip--select" data-range="year"><select id="year-select" aria-label="Rok"></select></span>
-              <button class="chip" data-range="all" type="button">Cały czas</button>
+              <button class="chip" data-range="all" type="button"><span class="lbl-long">Cały czas</span><span class="lbl-short">Całość</span></button>
             </div>
-            <div class="chips chips--quiet" id="sort-pills" aria-label="Sortuj według">
-              <button class="chip" data-sort="ms" type="button">Minuty</button>
-              <button class="chip" data-sort="plays" type="button">Odtworzenia</button>
+            <div class="seg sort-group only-desktop" aria-label="Sortuj według" role="group">
+              <button data-sort="ms" type="button">Minuty</button>
+              <button data-sort="plays" type="button">Odtworzenia</button>
             </div>
           </div>
-          <p id="range-label" class="range-label"></p>
+          <div class="subbar">
+            <div class="subbar__info">
+              <p id="range-label" class="range-label"></p>
+              <p id="live-status" class="live-status hidden"></p>
+            </div>
+            <div class="seg seg--sm sort-group only-mobile" aria-label="Sortuj według" role="group">
+              <button data-sort="ms" type="button">Minuty</button>
+              <button data-sort="plays" type="button">Odtw.</button>
+            </div>
+          </div>
           <p id="live-banner" class="live-banner hidden" role="status"></p>
 
           <section id="kpi-row" class="kpi-row" aria-label="Podsumowanie"></section>
 
           <section id="sec-top" class="section">
-            <div class="section-head"><h2 class="section-title">Top wykonawcy</h2><span class="section-hint">Kliknij, żeby zobaczyć wykres</span></div>
+            <div class="section-head"><h2 class="section-title">Top wykonawcy</h2><span class="section-hint only-desktop">Kliknij, żeby zobaczyć szczegóły</span></div>
             <div id="top-artists" class="artist-grid"></div>
             <div id="top-artists-more" class="more-wrap"></div>
           </section>
 
-          <section class="two-col">
-            <div class="section">
-              <div class="section-head"><h2 class="section-title">Top utwory</h2></div>
+          <section class="two-col" id="sec-tracks">
+            <div class="section-head only-mobile">
+              <h2 class="section-title">Top</h2>
+              <div class="seg" id="ta-tabs" role="tablist" aria-label="Utwory czy albumy">
+                <button type="button" role="tab" data-tab="tracks">Utwory</button>
+                <button type="button" role="tab" data-tab="albums">Albumy</button>
+              </div>
+            </div>
+            <div class="section col-tracks">
+              <div class="section-head only-desktop"><h2 class="section-title">Top utwory</h2></div>
               <div id="top-tracks"></div>
             </div>
-            <div class="section">
-              <div class="section-head"><h2 class="section-title">Top albumy</h2></div>
+            <div class="section col-albums">
+              <div class="section-head only-desktop"><h2 class="section-title">Top albumy</h2></div>
               <div id="top-albums"></div>
             </div>
           </section>
@@ -247,6 +278,7 @@
                 </div>
               </div>
             </div>
+            <div id="artist-top"></div>
             <div id="artist-body"></div>
           </section>
 
@@ -255,12 +287,24 @@
       </main>
     </div>
 
+    <!-- ─── KARTA WYKONAWCY (na wierzchu) ─────────────────── -->
+    <div id="artist-sheet" class="sheet hidden" role="dialog" aria-modal="true" aria-label="Wykonawca">
+      <div class="sheet__backdrop" data-sheet-close></div>
+      <div class="sheet__panel">
+        <div class="sheet__bar">
+          <button type="button" class="icon-btn" data-sheet-close title="Zamknij"><svg class="ico" aria-hidden="true"><use href="#i-back"/></svg><span class="sr-only">Zamknij</span></button>
+          <span class="sheet__title" id="sheet-title"></span>
+        </div>
+        <div id="sheet-slot" class="sheet__body"></div>
+      </div>
+    </div>
+
     <script src="./jszip.min.js"></script>
-    <script src="./analytics.js?v=22"></script>
-    <script src="./charts.js?v=22"></script>
-    <script src="./art.js?v=22"></script>
-    <script src="./cloud.js?v=22"></script>
-    <script src="./live.js?v=22"></script>
-    <script src="./app.js?v=22"></script>
+    <script src="./analytics.js?v=23"></script>
+    <script src="./charts.js?v=23"></script>
+    <script src="./art.js?v=23"></script>
+    <script src="./cloud.js?v=23"></script>
+    <script src="./live.js?v=23"></script>
+    <script src="./app.js?v=23"></script>
   </body>
 </html>

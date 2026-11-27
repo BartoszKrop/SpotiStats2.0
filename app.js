@@ -45,6 +45,7 @@
     artistSpan: 'range', // wykres wykonawcy domyślnie trzyma się wybranego okresu
     artistUnit: null,
     recordsKind: 'artist',
+    taTab: 'tracks', // telefon: zakładka Top utwory / Top albumy
     saveWarning: '',
     importNote: '',
     cloudMsg: null, // { text, warn } — komunikat o zapisie na GitHubie
@@ -193,6 +194,22 @@
   }
 
   // ─────────────────────────────────────────────────────── ZAKRES
+  // Ten sam zakres = ta sama tablica, więc obliczenia (topki, podsumowania) liczą się tylko raz.
+  const sliceMemo = new Map();
+  let sliceMemoRows = null;
+  function sliceOf(rows, from, to) {
+    if (rows !== state.rows) return A.sliceRange(rows, from, to);
+    if (sliceMemoRows !== rows) { sliceMemo.clear(); sliceMemoRows = rows; }
+    const k = `${from}|${to}`;
+    let sl = sliceMemo.get(k);
+    if (!sl) {
+      sl = A.sliceRange(rows, from, to);
+      if (sliceMemo.size > 12) sliceMemo.clear();
+      sliceMemo.set(k, sl);
+    }
+    return sl;
+  }
+
   function currentBounds() {
     const rows = state.rows;
     const anchor = rows[rows.length - 1].t;
@@ -290,14 +307,17 @@
   function renderAccounts() {
     const list = document.getElementById('account-list');
     const items = [];
+    // Puste miejsca zwinięte do jednego „Dodaj konto” (pierwsze wolne) — chyba że właśnie oglądasz puste.
+    const firstFree = [1, 2, 3, 4, 5].find((n) => !accountName(n));
     for (let slot = 1; slot <= 5; slot++) {
       const name = accountName(slot);
       const a = accountOf(slot);
       const active = slot === state.slot;
-      const sub = a.connectedAt ? (a.error ? 'automat: błąd' : 'automat działa') : a.export ? 'eksport na GitHubie' : name ? 'tylko eksport' : 'dodaj konto';
+      if (!name && !active && (slot !== firstFree || !accountName(state.slot))) continue;
+      const sub = a.connectedAt ? (a.error ? 'automat: błąd' : 'automat działa') : a.export ? 'eksport na GitHubie' : name ? 'tylko eksport' : 'znajomy albo drugie konto';
       items.push(`<li><button type="button" class="account${active ? ' is-active' : ''}${name ? '' : ' is-empty'}" data-slot="${slot}" aria-current="${active}">
         ${name ? avatar(name, 'avatar--sm') : '<span class="avatar avatar--sm avatar--empty" aria-hidden="true">+</span>'}
-        <span class="account-text"><span class="account-name">${esc(name || `Miejsce ${slot}`)}</span><span class="account-sub">${sub}</span></span>
+        <span class="account-text"><span class="account-name">${esc(name || (active ? `Miejsce ${slot}` : 'Dodaj konto'))}</span><span class="account-sub">${sub}</span></span>
       </button></li>`);
     }
     list.innerHTML = items.join('');
@@ -322,7 +342,7 @@
     state.rows = rows;
     const years = A.yearsIn(rows);
     if (!years.includes(state.year)) state.year = years[0];
-    document.getElementById('year-select').innerHTML = years.map((y) => `<option value="${y}">Rok ${y}</option>`).join('');
+    document.getElementById('year-select').innerHTML = years.map((y) => `<option value="${y}">${y}</option>`).join('');
     document.getElementById('artist-list').innerHTML = A.allArtists(rows).map((a) => `<option value="${esc(a)}"></option>`).join('');
     state.visibleFor = '';
     render();
@@ -330,13 +350,19 @@
 
   function render() {
     const has = state.rows.length > 0;
-    document.getElementById('state-empty').classList.toggle('hidden', has);
+    // Zanim dojdą dane z GitHuba, pokazujemy ładowanie — a nie ekran „wgraj plik”, który by tylko mignął.
+    const loading = !has && (state.booting || state.cloudLoading === state.slot);
+    document.getElementById('state-loading').classList.toggle('hidden', !loading);
+    document.getElementById('loading-text').textContent = state.cloudLoading === state.slot ? 'Wczytuję eksport z GitHuba…' : 'Wczytuję Twoją historię…';
+    document.getElementById('state-empty').classList.toggle('hidden', has || loading);
     document.getElementById('state-data').classList.toggle('hidden', !has);
     document.getElementById('topbar-actions').classList.toggle('hidden', !has);
     document.body.classList.toggle('has-data', has);
     renderAccounts();
     renderLiveBanner();
     renderCloud();
+    // Bez danych nagłówek profilu tylko by powtarzał tytuł ekranu importu / ładowania.
+    document.getElementById('hero').classList.toggle('hidden', !has);
     if (!has) { renderEmpty(); renderHero(null); return; }
 
     const m = state.meta || {};
@@ -354,13 +380,19 @@
 
     document.querySelectorAll('#range-pills .chip').forEach((p) => p.classList.toggle('is-active', p.dataset.range === state.range));
     document.getElementById('year-select').value = String(state.year);
-    document.querySelectorAll('#sort-pills .chip').forEach((p) => p.classList.toggle('is-active', p.dataset.sort === state.sortBy));
+    document.querySelectorAll('.sort-group button').forEach((p) => {
+      p.classList.toggle('is-active', p.dataset.sort === state.sortBy);
+      p.setAttribute('aria-pressed', String(p.dataset.sort === state.sortBy));
+    });
+    syncSeg('ta-tabs', 'tab', state.taTab);
+    document.getElementById('sec-tracks').dataset.tab = state.taTab;
 
     const { from, to } = currentBounds();
-    const slice = A.sliceRange(state.rows, from, to);
+    const slice = sliceOf(state.rows, from, to);
     const lastTs = state.rows[state.rows.length - 1].t;
     let label = fmtSpan(from, to);
-    if (state.range !== 'year' && state.range !== 'all') label += ` · liczone wstecz od ostatniego odsłuchu (${fmtDate(lastTs)})`;
+    // Dopisek tylko, gdy dane są nieświeże (np. sam eksport sprzed tygodni) — inaczej to szum.
+    if (state.range !== 'year' && state.range !== 'all' && Date.now() - lastTs > 2 * 86_400_000) label += ` · do ostatniego odsłuchu (${fmtDate(lastTs)})`;
     document.getElementById('range-label').textContent = label;
 
     const sum = A.summary(slice, from, to);
@@ -396,7 +428,7 @@
       kpi('Wykonawcy', nf.format(s.artists)),
       kpi('Utwory', nf.format(s.tracks)),
       kpi('Albumy', nf.format(s.albums)),
-      kpi('Średnio dziennie', `${nf.format(Math.round(s.minutesPerDay))} min`)
+      kpi('Na dzień', `${nf.format(Math.round(s.minutesPerDay))} min`)
     ].join('');
   }
 
@@ -406,7 +438,7 @@
   function previousRanks(kind) {
     if (state.range === 'all') return null;
     const { from, to } = currentBounds();
-    const prev = A.sliceRange(state.rows, from - (to - from), from);
+    const prev = sliceOf(state.rows, from - (to - from), from);
     if (!prev.length) return null;
     const map = new Map();
     A.top(prev, kind, { sortBy: state.sortBy, limit: 0 }).forEach((it, i) => map.set(it.key, i + 1));
@@ -647,12 +679,14 @@
     syncSeg('artist-span', 'span', state.artistSpan);
 
     if (!state.artist) {
-      const first = A.top(A.sliceRange(state.rows, rangeFrom, rangeTo), 'artist', { limit: 1 })[0];
+      const first = A.top(sliceOf(state.rows, rangeFrom, rangeTo), 'artist', { limit: 1 })[0];
       if (first) state.artist = first.name;
       input.value = state.artist;
     }
     const details = A.artistDetails(state.rows, state.artist);
+    const top = document.getElementById('artist-top');
     if (!details.first) {
+      top.innerHTML = '';
       syncSeg('artist-unit', 'unit', '', { day: false, week: false, month: false });
       body.innerHTML = state.artist
         ? `<p class="no-data">Nie ma „${esc(state.artist)}” w Twojej historii. Wybierz z podpowiedzi.</p>`
@@ -666,11 +700,11 @@
     const unit = pickUnit(state.artistUnit || 'week', from, to);
     syncSeg('artist-unit', 'unit', unit, allowedUnits(from, to));
 
-    const inRange = A.sliceRange(state.rows, rangeFrom, rangeTo).filter((r) => r.artist === state.artist);
+    const inRange = sliceOf(state.rows, rangeFrom, rangeTo).filter((r) => r.artist === state.artist);
     const rangeStats = A.summary(inRange, rangeFrom, rangeTo);
     const tops = A.top(inRange, 'track', { sortBy: state.sortBy, limit: 10 });
 
-    body.innerHTML = `
+    top.innerHTML = `
       <div class="artist-head">
         <div class="artist-id">${artistAvatar(details.artist, 'avatar--lg')}<h3 class="artist-name">${esc(details.artist)}</h3></div>
         <dl class="artist-facts">
@@ -679,7 +713,8 @@
           <div><dt>Pierwszy odsłuch</dt><dd>${fmtDate(details.first)}</dd></div>
           <div><dt>Ostatni odsłuch</dt><dd>${fmtDate(details.last)}</dd></div>
         </dl>
-      </div>
+      </div>`;
+    body.innerHTML = `
       <div id="artist-chart"></div>
       <h4 class="sub-title">Najczęściej słuchane utwory (wybrany zakres)</h4>
       <div id="artist-tracks">${trackList(tops, 'track')}</div>`;
@@ -694,12 +729,80 @@
     });
   }
 
-  function selectArtist(name, scroll) {
+  function selectArtist(name, open) {
     state.artist = name;
     savePrefs();
+    if (open) openSheet();
     const { from, to } = currentBounds();
     renderArtist(from, to);
-    if (scroll) document.getElementById('artist-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('sheet-title').textContent = state.artist;
+  }
+
+  // ─────────────────────────────────────────────────────── MENU „⋯”
+  function closeMenu() {
+    const menu = document.getElementById('hero-menu');
+    if (menu.classList.contains('hidden')) return;
+    menu.classList.add('hidden');
+    document.getElementById('btn-menu').setAttribute('aria-expanded', 'false');
+  }
+  function wireMenu() {
+    const btn = document.getElementById('btn-menu');
+    const menu = document.getElementById('hero-menu');
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = menu.classList.toggle('hidden') === false;
+      btn.setAttribute('aria-expanded', String(open));
+      if (open) { const first = menu.querySelector('.menu-item:not(.hidden)'); if (first) first.focus({ preventScroll: true }); }
+    });
+    menu.addEventListener('keydown', (e) => {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('label.menu-item')) { e.preventDefault(); document.getElementById('reimport-files').click(); }
+    });
+    document.addEventListener('click', (e) => { if (!menu.contains(e.target) && e.target !== btn) closeMenu(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!menu.classList.contains('hidden')) { closeMenu(); btn.focus(); } else if (sheetOpen()) closeSheet(); } });
+  }
+
+  // ─────────────────────────────────────────────────────── KARTA WYKONAWCY NA WIERZCHU
+  // Klik w wykonawcę otwiera jego kartę nad stroną (zamiast przewijać na sam dół).
+  // Ta sama sekcja #artist-card jest przenoszona do okna i z powrotem — jedna logika, jedne przyciski.
+  let sheetHome = null;
+  let sheetPushed = false;
+  let sheetReturnFocus = null;
+  const sheetOpen = () => !document.getElementById('artist-sheet').classList.contains('hidden');
+  function openSheet() {
+    const sheet = document.getElementById('artist-sheet');
+    const card = document.getElementById('artist-card');
+    if (sheetOpen()) { document.getElementById('sheet-slot').scrollTop = 0; return; }
+    sheetReturnFocus = document.activeElement;
+    if (!sheetHome) { sheetHome = document.createElement('div'); sheetHome.id = 'artist-card-home'; card.before(sheetHome); }
+    document.getElementById('sheet-slot').appendChild(card);
+    sheet.classList.remove('hidden');
+    document.body.classList.add('sheet-open');
+    requestAnimationFrame(() => sheet.classList.add('is-open'));
+    document.getElementById('sheet-slot').scrollTop = 0;
+    try { history.pushState({ sheet: true }, ''); sheetPushed = true; } catch { sheetPushed = false; }
+    sheet.querySelector('.sheet__bar .icon-btn').focus({ preventScroll: true });
+  }
+  function closeSheet(fromHistory) {
+    if (!sheetOpen()) return;
+    const sheet = document.getElementById('artist-sheet');
+    if (!fromHistory && sheetPushed) { sheetPushed = false; history.back(); return; } // popstate zamknie
+    sheetPushed = false;
+    sheet.classList.remove('is-open');
+    document.body.classList.remove('sheet-open');
+    const done = () => {
+      sheet.classList.add('hidden');
+      if (sheetHome) sheetHome.replaceWith(document.getElementById('artist-card'));
+      sheetHome = null;
+      if (state.rows.length) { const { from, to } = currentBounds(); renderArtist(from, to); }
+      if (sheetReturnFocus && document.contains(sheetReturnFocus)) sheetReturnFocus.focus({ preventScroll: true });
+    };
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) done(); else setTimeout(done, 220);
+  }
+  function wireSheet() {
+    document.getElementById('artist-sheet').addEventListener('click', (e) => {
+      if (e.target.closest('[data-sheet-close]')) closeSheet();
+    });
+    window.addEventListener('popstate', () => { if (sheetOpen()) closeSheet(true); });
   }
 
   // ─────────────────────────────────────────────────────── DEMO
@@ -750,9 +853,10 @@
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
     dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleImport(e.dataTransfer.files); });
 
-    document.getElementById('reimport-files').addEventListener('change', (e) => { handleImport(e.target.files); e.target.value = ''; });
+    document.getElementById('reimport-files').addEventListener('change', (e) => { closeMenu(); handleImport(e.target.files); e.target.value = ''; });
 
     document.getElementById('btn-clear-data').addEventListener('click', async () => {
+      closeMenu();
       if (!confirm('Usunąć wczytaną historię z tej przeglądarki?')) return;
       try { await clearData(state.slot); } catch { /* ignoruj */ }
       state.meta = null;
@@ -767,21 +871,30 @@
 
     document.getElementById('range-pills').addEventListener('click', (e) => {
       const pill = e.target.closest('button.chip');
-      if (!pill) return;
+      if (!pill || pill.dataset.range === state.range) return;
       state.range = pill.dataset.range;
       savePrefs();
-      render();
+      // Najpierw podświetl wybrany okres (natychmiastowa reakcja), potem przelicz resztę.
+      document.querySelectorAll('#range-pills .chip').forEach((p) => p.classList.toggle('is-active', p.dataset.range === state.range));
+      requestAnimationFrame(() => setTimeout(render, 0));
     });
     const yearSelect = document.getElementById('year-select');
     yearSelect.addEventListener('change', () => { state.range = 'year'; state.year = Number(yearSelect.value); savePrefs(); render(); });
     yearSelect.addEventListener('click', () => { if (state.range !== 'year') { state.range = 'year'; state.year = Number(yearSelect.value); savePrefs(); render(); } });
 
-    document.getElementById('sort-pills').addEventListener('click', (e) => {
-      const pill = e.target.closest('button.chip');
-      if (!pill) return;
+    document.querySelectorAll('.sort-group').forEach((g) => g.addEventListener('click', (e) => {
+      const pill = e.target.closest('button[data-sort]');
+      if (!pill || pill.dataset.sort === state.sortBy) return;
       state.sortBy = pill.dataset.sort;
       savePrefs();
       render();
+    }));
+    document.getElementById('ta-tabs').addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-tab]');
+      if (!b) return;
+      state.taTab = b.dataset.tab;
+      syncSeg('ta-tabs', 'tab', state.taTab);
+      document.getElementById('sec-tracks').dataset.tab = state.taTab;
     });
 
     document.getElementById('top-kind').addEventListener('click', (e) => {
@@ -805,14 +918,14 @@
       else if (state.visible.size < MAX_VISIBLE) state.visible.set(key, freeColor());
       else return;
       const { from, to } = currentBounds();
-      renderTopChart(A.sliceRange(state.rows, from, to), from, to);
+      renderTopChart(sliceOf(state.rows, from, to), from, to);
     });
 
     const onArtistPick = (e) => {
       const el = e.target.closest('[data-artist]');
       if (el) selectArtist(el.dataset.artist, true);
     };
-    for (const id of ['top-artists', 'top-tracks', 'top-albums', 'recent-list', 'kings-now', 'kings-list', 'artist-tracks-wrap']) {
+    for (const id of ['top-artists', 'top-tracks', 'top-albums', 'recent-list', 'kings-now', 'kings-list']) {
       const el = document.getElementById(id);
       if (!el) continue;
       el.addEventListener('click', onArtistPick);
@@ -823,7 +936,7 @@
       if (!e.target.closest('[data-more]')) return;
       state.showMore = !state.showMore;
       const { from, to } = currentBounds();
-      renderTops(A.sliceRange(state.rows, from, to));
+      renderTops(sliceOf(state.rows, from, to));
     });
 
     document.getElementById('records-kind').addEventListener('click', (e) => {
@@ -886,11 +999,22 @@
       renderArtist(from, to);
     });
 
+    // Przerysowanie tylko przy zmianie szerokości. Na telefonie chowanie paska adresu przy przewijaniu
+    // zmienia wysokość okna — przeliczanie wtedy całej strony powodowało szarpanie.
     let resizeTimer;
+    let lastWidth = window.innerWidth;
     window.addEventListener('resize', () => {
+      if (window.innerWidth === lastWidth) return;
+      lastWidth = window.innerWidth;
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => { if (state.rows.length) render(); }, 150);
     });
+
+    document.getElementById('live-banner').addEventListener('click', (e) => {
+      if (e.target.closest('[data-dismiss-msg]')) setCloudMsg('');
+    });
+    wireMenu();
+    wireSheet();
   }
 
   // ─────────────────────────────────────────────────────── KONTA I AUTOMAT (gałąź „dane”)
@@ -953,11 +1077,14 @@
       state.accounts = await L.loadAccounts();
     } catch {
       state.accounts = null;
+      state.booting = false;
+      render();
       return;
     }
+    state.booting = false;
+    maybeLoadCloudExport(state.slot);
     render();
     loadLiveFor(state.slot);
-    maybeLoadCloudExport(state.slot);
     try {
       state.images = await L.loadArtistImages();
       state.covers = await L.loadAlbumCovers().catch(() => new Map());
@@ -970,26 +1097,17 @@
   const CLOUD_ICO = '<svg class="ico ico--sm" aria-hidden="true"><use href="#i-cloud"/></svg>';
   function renderLiveBanner() {
     const el = document.getElementById('live-banner');
-    if (state.cloudMsg) {
-      el.innerHTML = `${state.cloudMsg.warn ? WARN_ICO : CLOUD_ICO} ${esc(state.cloudMsg.text)}`;
-      el.classList.remove('hidden');
-      el.classList.toggle('live-banner--warn', Boolean(state.cloudMsg.warn));
-      return;
-    }
-    if (state.saveWarning) {
-      el.innerHTML = `${WARN_ICO} ${esc(state.saveWarning)}`;
-      el.classList.remove('hidden');
-      el.classList.add('live-banner--warn');
-      return;
-    }
+    const quiet = document.getElementById('live-status');
     const L = window.SpotiLive;
     const s = state.accounts ? accountOf(state.slot) : null;
+    // Stan automatu: gdy wszystko gra — mała linijka pod zakresem; problemy — wyraźny baner.
     let html = '';
     let warn = false;
-    if (!s || (state.meta && state.meta.demo)) {
-      html = '';
+    let calm = '';
+    if (!s || !L || (state.meta && state.meta.demo)) {
+      calm = '';
     } else if (!s.connectedAt) {
-      html = 'Nowe odsłuchy mogą się dociągać same — <a href="./spotify.html">włącz automat</a>.';
+      calm = `Nowe odsłuchy mogą dociągać się same — <a href="./spotify.html${state.slot > 1 ? `?konto=${state.slot}` : ''}">włącz automat</a>`;
     } else if (s.error === 'invalid_grant') {
       warn = true;
       html = `${WARN_ICO} Logowanie automatu do Spotify wygasło, więc nowe odsłuchy się nie dociągają. <a href="./spotify.html?konto=${state.slot}">Zaloguj się ponownie</a>.`;
@@ -998,13 +1116,27 @@
       html = `${WARN_ICO} Logowanie automatu do Spotify wygaśnie za ok. ${Math.max(0, Math.round(L.TOKEN_LIFETIME_DAYS - L.tokenAgeDays(s)))} dni. <a href="./spotify.html?konto=${state.slot}">Odnów je</a>.`;
     } else if (s.error) {
       warn = true;
-      html = `${WARN_ICO} Ostatnia synchronizacja się nie udała. <a href="./spotify.html">Szczegóły</a>.`;
+      html = `${WARN_ICO} Ostatnia synchronizacja automatu się nie udała. <a href="./spotify.html">Szczegóły</a>.`;
     } else if (s.lastSync) {
-      const ago = Math.floor((Date.now() - Date.parse(s.lastSync)) / 3_600_000);
-      warn = ago > 6;
-      html = `${warn ? WARN_ICO : '<span class="live-dot"></span>'} Automat: ostatnia synchronizacja ${ago < 1 ? 'mniej niż godzinę' : `${ago} godz.`} temu` +
-        (state.liveAdded ? `, dołożył ${nf.format(state.liveAdded)} odsłuchów${state.exportRows.length ? ' po końcu eksportu' : ''}.` : '.') +
-        (warn ? ' Coś się zacięło — <a href="./spotify.html">sprawdź</a>.' : '');
+      const agoMin = Math.max(0, Math.floor((Date.now() - Date.parse(s.lastSync)) / 60_000));
+      if (agoMin > 6 * 60) {
+        warn = true;
+        html = `${WARN_ICO} Automat nie synchronizował się od ${Math.floor(agoMin / 60)} godz. Coś się zacięło — <a href="./spotify.html">sprawdź</a>.`;
+      } else {
+        const ago = agoMin < 1 ? 'przed chwilą' : agoMin < 60 ? `${agoMin} min temu` : `${Math.floor(agoMin / 60)} godz. temu`;
+        calm = `<span class="live-dot" aria-hidden="true"></span>Na bieżąco · synchronizacja ${ago}` +
+          (state.liveAdded ? ` · +${nf.format(state.liveAdded)} z automatu` : '');
+      }
+    }
+    quiet.innerHTML = calm;
+    quiet.classList.toggle('hidden', !calm);
+
+    if (state.cloudMsg) {
+      html = `${state.cloudMsg.warn ? WARN_ICO : CLOUD_ICO} ${esc(state.cloudMsg.text)} <button type="button" class="banner-x" data-dismiss-msg aria-label="Zamknij">×</button>`;
+      warn = Boolean(state.cloudMsg.warn);
+    } else if (state.saveWarning) {
+      html = `${WARN_ICO} ${esc(state.saveWarning)}`;
+      warn = true;
     }
     el.innerHTML = html;
     el.classList.toggle('hidden', !html);
@@ -1112,7 +1244,7 @@
     if (acc.export.importedAt <= localAt + 1000) return;
     state.cloudLoading = slot;
     const status = document.getElementById('import-status');
-    if (!state.exportRows.length) status.textContent = 'Wczytuję eksport z GitHuba…';
+    if (!state.exportRows.length) render();
     try {
       const rows = await L.loadExportRows(acc);
       if (state.slot !== slot || !rows.length) return;
@@ -1124,11 +1256,12 @@
       if (!state.exportRows.length) status.textContent = 'Nie udało się wczytać eksportu z GitHuba — spróbuj odświeżyć stronę.';
     } finally {
       state.cloudLoading = null;
+      if (!state.rows.length) render();
     }
   }
 
   function wireCloud() {
-    document.getElementById('btn-cloud').addEventListener('click', openCloud);
+    document.getElementById('btn-cloud').addEventListener('click', () => { closeMenu(); openCloud(); });
     document.getElementById('cloud-close').addEventListener('click', () => document.getElementById('cloud-panel').classList.add('hidden'));
     document.getElementById('cloud-send').addEventListener('click', cloudSend);
     document.getElementById('cloud-remove').addEventListener('click', cloudRemove);
@@ -1155,6 +1288,7 @@
 
   async function init() {
     loadPrefs();
+    state.booting = Boolean(window.SpotiLive) && location.protocol !== 'file:';
     wire();
     wireScrollSpy();
     wireCloud();
