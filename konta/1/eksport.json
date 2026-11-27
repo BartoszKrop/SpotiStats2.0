@@ -1,6 +1,6 @@
 {
  "v": 1,
- "importedAt": 1795724828912,
+ "importedAt": 1795767881377,
  "name": null,
  "files": [
   "eksport/2018.json",
@@ -13,7 +13,7 @@
   "eksport/2025.json",
   "eksport/2026.json"
  ],
- "rows": 94158,
+ "rows": 107501,
  "from": 1525334677000,
- "to": 1776717839000
+ "to": 1795639685000
 }
