@@ -587,7 +587,7 @@ body.sheet-open { overflow: hidden; }
 /* ══ Runda 2 (v24): interaktywne legendy, porównanie, animacje ══ */
 /* Wykresy: rysowanie linii, podświetlanie serii */
 .chart-series { transition: opacity 0.2s; }
-.chart-svg.has-focus .chart-series:not(.is-focus) { opacity: 0.12; }
+.chart-svg.has-focus .chart-series:not(.is-focus) { opacity: 0.3; }
 .chart-svg.has-focus .chart-series.is-focus .chart-line { stroke-width: 3; }
 .chart-series.is-entering .chart-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 0.9s cubic-bezier(0.3, 0.7, 0.3, 1) forwards; }
 .chart-series.is-entering .chart-area, .chart-series.is-entering .chart-point { animation: fade-in 0.6s 0.25s both; }
@@ -730,4 +730,47 @@ html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adj
   .card-controls > .combo { width: 100%; }
   .card-controls > .combo .field-input { width: 100%; }
   .combo-list { width: 100%; }
+}
+
+/* ══ Profil: własne tło, zdjęcie profilowe, edycja (v28) ══ */
+.hero { background: linear-gradient(180deg, #2a3a33 0%, #1a221e 70%, var(--base) 100%); }
+/* Tło pod treścią bez nowego kontekstu nakładania (menu „⋯” musi zostać nad resztą strony). */
+.hero-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.hero > .hero-avatar-btn, .hero > .hero-text { position: relative; }
+.hero-bg::before { content: ''; position: absolute; inset: 0; background: var(--cover) center / cover no-repeat; opacity: 0; transition: opacity 0.5s; }
+.hero-bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.35) 55%, var(--base) 100%); opacity: 0; transition: opacity 0.5s; }
+.hero.has-cover .hero-bg::before { opacity: 1; }
+.hero.has-cover .hero-bg::after { opacity: 1; }
+.hero.cover-blur .hero-bg::before { filter: blur(32px) saturate(1.3) brightness(0.75); transform: scale(1.25); opacity: 0.9; }
+.hero.has-cover .hero-name, .hero.has-cover .hero-sub { text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55); }
+.hero-avatar-btn { border: none; padding: 0; cursor: pointer; flex-shrink: 0; transition: transform 0.2s, box-shadow 0.2s; }
+.hero-avatar-btn:hover { transform: scale(1.03); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5), 0 8px 40px rgba(0, 0, 0, 0.6); }
+.hero-avatar-btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+
+.sheet--dialog .sheet__panel { width: min(520px, 100%); }
+.pd-body { padding: 1rem 1.25rem 1.25rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.pd-cover { position: relative; aspect-ratio: 3 / 1; border-radius: 10px; margin-bottom: 2.6rem; background: linear-gradient(180deg, #2a3a33, #1a221e); }
+.pd-cover__img { position: absolute; inset: 0; border-radius: inherit; background: center / cover no-repeat; }
+.pd-cover__actions { position: absolute; top: 0.5rem; right: 0.5rem; display: flex; gap: 0.35rem; }
+.pd-cover__actions .btn { background: rgba(0, 0, 0, 0.55); border-color: transparent; color: #fff; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.pd-cover__actions .btn:hover { background: rgba(0, 0, 0, 0.75); }
+.pd-avatar {
+  position: absolute; left: 1rem; bottom: -2.4rem; width: 88px; height: 88px; border-radius: 50%; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 800; color: #fff;
+  background: hsl(var(--h, 140) 45% 38%); box-shadow: 0 0 0 4px var(--card), 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+.pd-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.pd-avatar-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; padding-left: calc(88px + 1.75rem); min-height: 0; margin-top: -2.4rem; margin-bottom: 0.6rem; }
+.pd-btn, .pd-avatar-actions .btn { cursor: pointer; }
+.pd-label { font-size: 0.8rem; font-weight: 700; color: var(--text-2); margin-top: 0.4rem; }
+.pd-name { width: 100%; font-size: 16px; }
+.pd-note { font-size: 0.78rem; color: var(--text-2); line-height: 1.45; }
+.pd-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.25rem; }
+.link-btn { background: none; border: none; padding: 0; color: var(--green); font: inherit; cursor: pointer; text-decoration: underline; }
+@media (max-width: 760px) {
+  .sheet--dialog { padding: 0.75rem; align-items: flex-end; }
+  .sheet--dialog .sheet__panel { height: auto; max-height: calc(100vh - 1.5rem); border-radius: 16px; padding-top: 0; }
+  .pd-avatar { width: 72px; height: 72px; font-size: 1.6rem; bottom: -2rem; }
+  .pd-avatar-actions { padding-left: calc(72px + 1.5rem); margin-top: -2.2rem; }
+  .pd-avatar-actions .btn { padding: 0.4rem 0.7rem; }
 }

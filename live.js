@@ -60,6 +60,12 @@
         s.export = m;
         if (!s.name && m.name) s.name = m.name;
       }
+      // Profil (nazwa, zdjęcie, tło) ustawiony w aplikacji — ma pierwszeństwo przed nazwą z automatu.
+      const p = await getJson(`konta/${s.slot}/profil.json`).catch(() => null);
+      if (p && typeof p === 'object') {
+        s.profile = p;
+        if (p.name) s.name = p.name;
+      }
     }));
     return slots;
   }

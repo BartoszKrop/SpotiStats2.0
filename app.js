@@ -340,8 +340,29 @@
   function accountOf(slot) {
     return (state.accounts || []).find((a) => a.slot === slot) || { slot, name: null };
   }
+  // ─────────────────────────────────────────────────────── PROFIL (nazwa, zdjęcie, tło)
+  const profKey = (slot) => `ss_prof_${slot}`;
+  function localProfile(slot) {
+    try { return JSON.parse(localStorage.getItem(profKey(slot)) || 'null'); } catch { return null; }
+  }
+  /** Nowszy z dwóch: zapisany w tej przeglądarce albo pobrany z GitHuba. */
+  function profileOf(slot) {
+    const loc = localProfile(slot);
+    const rem = accountOf(slot).profile || null;
+    if (loc && (!rem || (loc.updatedAt || 0) >= (rem.updatedAt || 0))) return loc;
+    return rem || {};
+  }
+  /** Awatar konta: własne zdjęcie albo kolorowe inicjały. */
+  function accountAvatar(slot, name, cls = '') {
+    const img = profileOf(slot).avatar;
+    if (!img) return avatar(name, cls);
+    return `<span class="avatar avatar--img ${cls}" aria-hidden="true"><img src="${esc(img)}" alt="" decoding="async" /></span>`;
+  }
+
   function accountName(slot) {
     const a = accountOf(slot);
+    const pn = profileOf(slot).name;
+    if (pn) return pn;
     if (a.name) return a.name;
     if (a.connectedAt || a.export) return slot === 1 ? 'Ty' : `Konto ${slot}`;
     return slot === 1 ? 'Ty' : null;
@@ -358,7 +379,7 @@
     const a = accountOf(slot);
     const sub = a.connectedAt ? (a.error ? 'automat: błąd' : 'automat działa') : a.export ? 'eksport na GitHubie' : state.exportRows.length ? 'eksport w tej przeglądarce' : 'brak danych';
     list.innerHTML = `<li><button type="button" class="account is-active" data-logout title="Zmień konto / wyloguj">
-        ${accountName(slot) ? avatar(name, 'avatar--sm') : '<span class="avatar avatar--sm avatar--empty" aria-hidden="true">+</span>'}
+        ${accountName(slot) ? accountAvatar(slot, name, 'avatar--sm') : '<span class="avatar avatar--sm avatar--empty" aria-hidden="true">+</span>'}
         <span class="account-text"><span class="account-name">${esc(name)}</span><span class="account-sub">${sub}</span></span>
         <span class="account-switch" aria-hidden="true">Zmień</span>
       </button></li>`;
@@ -385,7 +406,7 @@
       const name = accountName(n) || (n === 1 ? 'Ty' : `Konto ${n}`);
       const a = accountOf(n);
       const sub = a.connectedAt ? 'automat działa' : a.export || localSlots.has(n) ? 'eksport' : 'brak danych';
-      return `<li><button type="button" class="who-card" data-login="${n}">${avatar(name, 'avatar--who')}<span class="who-name">${esc(name)}</span><span class="who-sub">${sub}</span></button></li>`;
+      return `<li><button type="button" class="who-card" data-login="${n}">${accountAvatar(n, name, 'avatar--who')}<span class="who-name">${esc(name)}</span><span class="who-sub">${sub}</span></button></li>`;
     });
     if (free) people.push(`<li><button type="button" class="who-card who-card--add" data-login="${free}"><span class="avatar avatar--who avatar--empty" aria-hidden="true">+</span><span class="who-name">Dodaj osobę</span><span class="who-sub">wolne miejsce ${free} z 5</span></button></li>`);
     document.getElementById('who-list').innerHTML = people.join('');
@@ -505,8 +526,29 @@
   function renderHero(sum) {
     const name = state.meta && state.meta.demo ? 'Dane przykładowe' : accountName(state.slot) || `Wolne miejsce ${state.slot}`;
     document.getElementById('hero-name').textContent = name;
-    document.getElementById('hero-avatar').outerHTML = `<div id="hero-avatar" class="avatar avatar--xl" style="--h:${hueOf(name)}" aria-hidden="true">${esc(initials(name))}</div>`;
-    document.getElementById('hero').style.setProperty('--h', hueOf(name));
+    const demo = state.meta && state.meta.demo;
+    const prof = demo ? {} : profileOf(state.slot);
+    const av = prof.avatar
+      ? `<button type="button" id="hero-avatar" class="avatar avatar--xl avatar--img hero-avatar-btn" data-edit-profile title="Edytuj profil"><img src="${esc(prof.avatar)}" alt="" /></button>`
+      : `<button type="button" id="hero-avatar" class="avatar avatar--xl hero-avatar-btn" style="--h:${hueOf(name)}" data-edit-profile title="Edytuj profil">${esc(initials(name))}</button>`;
+    const avEl = document.getElementById('hero-avatar');
+    if (avEl.dataset.sig !== av) { avEl.outerHTML = av; document.getElementById('hero-avatar').dataset.sig = av; }
+    // Tło: własne zdjęcie → zdjęcie Twojego nr 1 (rozmyte) → spokojny gradient.
+    document.querySelector('.menu-item[data-edit-profile]').classList.toggle('hidden', Boolean(demo));
+    const hero = document.getElementById('hero');
+    let cover = prof.cover || '';
+    let blurred = false;
+    if (!cover && sum && state.rows.length) {
+      const { from, to } = currentBounds();
+      const topA = A.top(sliceOf(state.rows, from, to), 'artist', { sortBy: state.sortBy, limit: 1 })[0];
+      const img = topA && (state.images.get(topA.name.toLowerCase()) || (art && !isDemo() ? art.artist(topA.name) : null));
+      if (img && state.imagesReady.has(img)) { cover = img; blurred = true; }
+    }
+    hero.classList.toggle('has-cover', Boolean(cover));
+    hero.classList.toggle('cover-blur', blurred);
+    const bg = hero.querySelector('.hero-bg');
+    const want = cover ? `url("${cover.replace(/"/g, '%22')}")` : '';
+    if (bg.dataset.src !== want) { bg.dataset.src = want; if (want) bg.style.setProperty('--cover', want); else bg.style.removeProperty('--cover'); }
     const when = state.range === 'year' ? `w ${state.year} roku` : RANGE_NAMES[state.range];
     document.getElementById('hero-sub').textContent = sum
       ? `${nf.format(minutes(sum.ms))} minut · ${nf.format(sum.plays)} odtworzeń · ${nf.format(sum.artists)} wykonawców ${when}`
@@ -612,9 +654,21 @@
     const sub = (it) => (kind === 'track' ? `<span class="track-sub">${esc(it.artist)}</span>` : '');
     const noun = kind === 'artist' ? 'wykonawca' : 'utwór';
     const hero = r.longest;
-    const now = r.current;
-    const lastWeek = A.bucketStart(Math.min(to - 1, state.rows[state.rows.length - 1].t), 'week');
-    const nowLabel = now && now.week === lastWeek ? `Nr 1 w tym tygodniu` : 'Ostatni nr 1';
+    let now = r.current;
+    // Tydzień przełomu roku, który w większości należy już do następnego roku (jak w tygodniach ISO), pomijamy.
+    const edge = A.bucketStart(to - 1, 'week');
+    if (to <= Date.now() && to - edge < 4 * 86_400_000 && now && now.week === edge) {
+      const c = recordsCache.data;
+      c[`${kind}|cut`] ||= A.records(slice.filter((x) => x.t < edge), kind, { limit: 1, sortBy: state.sortBy });
+      if (c[`${kind}|cut`].current) now = c[`${kind}|cut`].current;
+    }
+    // „W tym tygodniu” tylko gdy okres obejmuje dziś; dla przeszłego okresu (np. rok 2025) to ostatni tydzień tego okresu.
+    let lastWeek = A.bucketStart(Math.min(to - 1, state.rows[state.rows.length - 1].t), 'week');
+    if (lastWeek === edge && to - edge < 4 * 86_400_000 && to <= Date.now()) lastWeek = A.bucketStart(edge - 1, 'week');
+    const thisWeek = A.bucketStart(Date.now(), 'week');
+    const periodName = state.range === 'year' ? `${state.year} roku` : state.range === 'all' ? 'danych' : 'okresu';
+    const nowLabel = !now ? '' : now.week === thisWeek && to > Date.now() ? 'Nr 1 w tym tygodniu'
+      : now.week === lastWeek ? `Nr 1 w ostatnim tygodniu ${periodName}` : `Ostatni nr 1 ${state.range === 'year' ? `w ${state.year}` : 'w tym okresie'}`;
     const nowSub = now ? `${now.run > 1 ? `${plWeeks(now.run)} z rzędu · ` : ''}${state.sortBy === 'plays' ? `${nf.format(now.plays)} odtw.` : `${nf.format(minutes(now.ms))} min`} w tygodniu od ${fmtDate(now.week)}` : '';
     const leaders = r.leaders.map((l, i) => `<li class="rec-row" data-artist="${esc(l.artist)}" tabindex="0" role="button">
         <span class="track-rank">${i + 1}</span>
@@ -710,7 +764,9 @@
       if (c) c.highlight(b ? b.dataset.name : null);
     };
     legend.addEventListener('pointerover', (e) => { if (e.pointerType !== 'touch') on(e); });
-    legend.addEventListener('focusin', on);
+    // Fokus podświetla tylko przy nawigacji klawiaturą; kliknięcie/dotyk nie zostawia przygaszonego wykresu.
+    legend.addEventListener('focusin', (e) => { if (e.target.matches(':focus-visible')) on(e); });
+    legend.addEventListener('click', () => { const c = chart(); if (c) c.highlight(null); });
     legend.addEventListener('pointerleave', () => { const c = chart(); if (c) c.highlight(null); });
     legend.addEventListener('focusout', () => { const c = chart(); if (c) c.highlight(null); });
   }
@@ -1114,6 +1170,115 @@
     window.addEventListener('popstate', () => { if (sheetOpen()) closeSheet(true); });
   }
 
+  // ─────────────────────────────────────────────────────── EDYCJA PROFILU
+  // Nazwa, zdjęcie profilowe i tło. Zdjęcia są zmniejszane w przeglądarce (JPEG) i zapisywane
+  // od razu na tym urządzeniu, a z tokenem także w konta/<n>/profil.json na gałęzi z danymi.
+  const pd = { draft: null };
+  function readImage(file, w, h, quality) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const ratio = w / h;
+        let sw = img.naturalWidth, sh = img.naturalHeight, sx = 0, sy = 0;
+        if (sw / sh > ratio) { const nw = sh * ratio; sx = (sw - nw) / 2; sw = nw; } else { const nh = sw / ratio; sy = (sh - nh) / 2; sh = nh; }
+        const scale = Math.min(1, sw / w);
+        const cw = Math.round(w * (scale < 1 ? scale : 1)), ch = Math.round(h * (scale < 1 ? scale : 1));
+        const canvas = document.createElement('canvas');
+        canvas.width = cw; canvas.height = ch;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cw, ch);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Nie udało się wczytać zdjęcia.')); };
+      img.src = url;
+    });
+  }
+  function pdPreview() {
+    const d = pd.draft;
+    const name = document.getElementById('pd-name').value.trim() || accountName(state.slot) || 'Ty';
+    const cov = document.getElementById('pd-cover-img');
+    cov.style.backgroundImage = d.cover ? `url("${d.cover}")` : '';
+    document.getElementById('pd-cover').classList.toggle('is-empty', !d.cover);
+    document.getElementById('pd-cover-del').classList.toggle('hidden', !d.cover);
+    document.getElementById('pd-avatar-del').classList.toggle('hidden', !d.avatar);
+    const av = document.getElementById('pd-avatar');
+    av.style.setProperty('--h', hueOf(name));
+    av.innerHTML = d.avatar ? `<img src="${d.avatar}" alt="" />` : esc(initials(name));
+    av.classList.toggle('has-img', Boolean(d.avatar));
+  }
+  function openProfile() {
+    if (isDemo() || !state.slot) return;
+    closeMenu();
+    const dlg = document.getElementById('profile-dialog');
+    const p = profileOf(state.slot);
+    pd.draft = { avatar: p.avatar || '', cover: p.cover || '' };
+    pd.returnFocus = document.activeElement;
+    document.getElementById('pd-name').value = accountName(state.slot) || '';
+    document.getElementById('pd-status').textContent = '';
+    document.getElementById('pd-save').disabled = false;
+    pdPreview();
+    dlg.classList.remove('hidden');
+    requestAnimationFrame(() => dlg.classList.add('is-open'));
+  }
+  function closeProfile() {
+    const dlg = document.getElementById('profile-dialog');
+    if (dlg.classList.contains('hidden')) return;
+    dlg.classList.remove('is-open');
+    setTimeout(() => dlg.classList.add('hidden'), reduceMotion() ? 0 : 200);
+    if (pd.returnFocus && document.contains(pd.returnFocus)) pd.returnFocus.focus({ preventScroll: true });
+  }
+  async function saveProfile() {
+    const slot = state.slot;
+    const status = document.getElementById('pd-status');
+    const btn = document.getElementById('pd-save');
+    const profile = { name: document.getElementById('pd-name').value.trim().slice(0, 40), avatar: pd.draft.avatar || '', cover: pd.draft.cover || '', updatedAt: Date.now() };
+    try { localStorage.setItem(profKey(slot), JSON.stringify(profile)); } catch { /* brak miejsca — zostaje zapis na GitHubie */ }
+    render();
+    const token = getToken();
+    if (!token || !window.SpotiCloud) {
+      status.innerHTML = 'Zapisano na tym urządzeniu. Żeby profil był widoczny wszędzie, dodaj token GitHuba w <button type="button" class="link-btn" data-pd-cloud>„Wyślij do chmury”</button>.';
+      return;
+    }
+    btn.disabled = true;
+    status.textContent = 'Zapisuję na GitHubie…';
+    try {
+      await window.SpotiCloud.saveProfile({ token, repo: cloudRepo(), slot, profile });
+      const acc = accountOf(slot);
+      acc.profile = profile;
+      if (profile.name) acc.name = profile.name;
+      status.textContent = 'Zapisano. Na innych urządzeniach profil pojawi się po odświeżeniu.';
+      setTimeout(closeProfile, 900);
+    } catch (e) {
+      status.textContent = `Zapisano tylko na tym urządzeniu — GitHub: ${e.message || e}`;
+    } finally { btn.disabled = false; }
+  }
+  function wireProfile() {
+    const dlg = document.getElementById('profile-dialog');
+    document.addEventListener('click', (e) => { if (e.target.closest('[data-edit-profile]')) { e.preventDefault(); openProfile(); } });
+    dlg.addEventListener('click', (e) => {
+      if (e.target.closest('[data-pd-close]')) closeProfile();
+      if (e.target.closest('[data-pd-cloud]')) { closeProfile(); openCloud(); }
+    });
+    const pick = (inputId, key, w, h, q) => document.getElementById(inputId).addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      const status = document.getElementById('pd-status');
+      try { pd.draft[key] = await readImage(file, w, h, q); status.textContent = ''; pdPreview(); } catch (err) { status.textContent = err.message; }
+    });
+    pick('pd-avatar-file', 'avatar', 320, 320, 0.85);
+    pick('pd-cover-file', 'cover', 1500, 500, 0.8);
+    document.getElementById('pd-avatar-del').addEventListener('click', () => { pd.draft.avatar = ''; pdPreview(); });
+    document.getElementById('pd-cover-del').addEventListener('click', () => { pd.draft.cover = ''; pdPreview(); });
+    document.getElementById('pd-name').addEventListener('input', pdPreview);
+    document.getElementById('pd-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveProfile(); });
+    document.getElementById('pd-save').addEventListener('click', saveProfile);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !dlg.classList.contains('hidden')) closeProfile(); });
+  }
+
   // ─────────────────────────────────────────────────────── DEMO
   function demoRows() {
     const artists = [
@@ -1315,6 +1480,7 @@
     });
     wireMenu();
     wireSheet();
+    wireProfile();
     wireInteractive();
   }
 

@@ -135,7 +135,12 @@
     await deleteFile(token, repo, `konta/${slot}/eksport.json`, `Eksport konta ${slot}: usunięto spis`);
   }
 
-  const API_EXPORT = { encodeRows, decodeRows, upload, remove, CloudError };
+  /** Profil konta (nazwa, zdjęcie profilowe, tło) — konta/<n>/profil.json. Zdjęcia jako data URL (już zmniejszone). */
+  async function saveProfile({ token, repo, slot, profile }) {
+    await putFile(token, repo, `konta/${slot}/profil.json`, JSON.stringify(profile), `Profil konta ${slot}`);
+  }
+
+  const API_EXPORT = { encodeRows, decodeRows, upload, remove, saveProfile, CloudError };
   if (typeof module === 'object' && module.exports) module.exports = API_EXPORT;
   else root.SpotiCloud = API_EXPORT;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
