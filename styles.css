@@ -657,6 +657,18 @@ body.sheet-open { overflow: hidden; }
 }
 
 /* ══ Kto słucha? (wybór konta) ══ */
+.gate { z-index: 300; }
+.gate-inner { width: min(360px, 100%); gap: 1rem; }
+.gate-inner .who-title { margin-bottom: 0.25rem; }
+.gate-hint { font-size: 0.9rem; color: var(--text-2); min-height: 1.2em; }
+.gate-input { width: 100%; text-align: center; font-size: 1.05rem; }
+.gate-inner .btn { width: 100%; justify-content: center; }
+.gate-msg { font-size: 0.85rem; color: #f3727f; min-height: 1.2em; }
+.gate-inner.is-shake { animation: gate-shake 0.35s; }
+@keyframes gate-shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+body.is-locked { overflow: hidden; }
+@media (prefers-reduced-motion: reduce) { .gate-inner.is-shake { animation: none; } }
+
 .who {
   position: fixed; inset: 0; z-index: 200; overflow-y: auto; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem calc(2rem + env(safe-area-inset-bottom));
   background: radial-gradient(120% 80% at 50% 0%, #1d3a29 0%, #121212 55%, #000 100%); animation: fade-in 0.25s both;

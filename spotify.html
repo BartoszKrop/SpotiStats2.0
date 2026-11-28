@@ -88,7 +88,8 @@
       </section>
     </main>
 
-    <script src="./live.js?v=5"></script>
+    <script src="./crypt.js?v=1"></script>
+    <script src="./live.js?v=6"></script>
     <script>
       (function () {
         'use strict';
@@ -198,15 +199,18 @@
           return `🟢 ostatnia synchronizacja ${fmt(a.lastSync)}` + (left <= 14 ? ` · ⚠️ logowanie wygaśnie za ${Math.max(left, 0)} dni` : ` · ważne jeszcze ok. ${left} dni`);
         }
 
-        L.loadAccounts().then((accounts) => {
+        // Stan kont jest zaszyfrowany — odczytamy go kluczem zapamiętanym po wpisaniu hasła na stronie statystyk.
+        L.loadConfig().catch(() => null).then((config) => L.restoreKey(config)).then(() => L.loadAccounts()).then((accounts) => {
           const any = accounts.some((a) => a.connectedAt);
           if (!returned || !q.has('code')) $('status-text').textContent = any ? '' : '⚪ Jeszcze nikt nie jest podłączony. Wykonaj kroki poniżej.';
           else $('status-text').textContent = 'Zalogowano w Spotify — przekaż kod (karta wyżej).';
           $('slot-table').querySelector('tbody').innerHTML = accounts.map((a) =>
             `<tr><td>${a.slot}</td><td><b>${esc(a.name || (a.connectedAt ? (a.slot === 1 ? 'Ty' : `Konto ${a.slot}`) : '—'))}</b></td><td>${describe(a)}</td></tr>`).join('');
           $('slot-table').classList.remove('hidden');
-        }).catch(() => {
-          $('status-text').textContent = 'Nie udało się sprawdzić stanu (brak połączenia z GitHubem?).';
+        }).catch((err) => {
+          $('status-text').innerHTML = err && err.code === 'locked'
+            ? 'Stan kont jest zaszyfrowany. Wpisz hasło na <a href="./">stronie statystyk</a>, a potem wróć tutaj.'
+            : 'Nie udało się sprawdzić stanu (brak połączenia z GitHubem?).';
         });
       })();
     </script>

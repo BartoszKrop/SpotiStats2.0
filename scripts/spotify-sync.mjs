@@ -17,11 +17,17 @@
  *   konta/<n>/odsluchy/<rok>.json  — odsłuchy w formacie rozszerzonego eksportu Spotify
  *   wykonawcy.json                 — zdjęcia wykonawców (nazwa małymi literami → { name, img, at })
  *   okladki.json                   — okładki albumów („wykonawca|album” małymi literami → { img, at })
+ *
+ * Szyfrowanie: gdy w repo jest szyfr.json, a w sekrecie SPOTISTATS_HASLO hasło do strony, każdy plik
+ * jest zapisywany zaszyfrowany (crypt.js), a jawne pliki z dawnych zapisów są szyfrowane przy okazji.
  */
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const SpotiCrypt = createRequire(import.meta.url)('../crypt.js');
 
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const RECENT_URL = 'https://api.spotify.com/v1/me/player/recently-played?limit=50';
@@ -111,10 +117,65 @@ async function tokenRequest(params, env) {
   return body;
 }
 
-async function readJson(path, fallback) {
-  try { return JSON.parse(await readFile(path, 'utf8')); } catch { return fallback; }
+// ─────────────────────────────────────────────── odczyt/zapis (z szyfrowaniem)
+
+/** Klucz z hasła (SPOTISTATS_HASLO) — null = zapis jawny. */
+let dataKey = null;
+
+const DEFAULT_CONFIG = join(dirname(fileURLToPath(import.meta.url)), '..', 'szyfr.json');
+
+/**
+ * Ustawia szyfrowanie na ten przebieg. Bez szyfr.json — jak dawniej (jawnie).
+ * Z szyfr.json, ale bez sekretu — zapis jawny z ostrzeżeniem (dopóki ktoś nie doda sekretu).
+ */
+export async function initCrypto(env = process.env, configPath = env.SPOTISTATS_CONFIG || DEFAULT_CONFIG) {
+  dataKey = null;
+  let config = null;
+  try { config = JSON.parse(await readFile(configPath, 'utf8')); } catch { /* brak szyfrowania */ }
+  if (!config) return { mode: 'jawne' };
+  if (!env.SPOTISTATS_HASLO) {
+    console.log('::warning::Brak sekretu SPOTISTATS_HASLO — dane zapisują się jeszcze bez szyfrowania. Dodaj go w Settings → Secrets and variables → Actions.');
+    return { mode: 'bez-hasla' };
+  }
+  const key = await SpotiCrypt.unlock(env.SPOTISTATS_HASLO, config);
+  if (!key) throw new Error('Sekret SPOTISTATS_HASLO nie pasuje do szyfr.json (inne hasło niż na stronie).');
+  dataKey = key;
+  return { mode: 'szyfrowane' };
 }
-const writeJson = (path, data) => writeFile(path, JSON.stringify(data, null, 1) + '\n');
+export const resetCrypto = () => { dataKey = null; };
+
+async function readJson(path, fallback) {
+  let parsed;
+  try { parsed = JSON.parse(await readFile(path, 'utf8')); } catch { return fallback; }
+  // Zaszyfrowany plik bez klucza to błąd, nie „brak pliku” — inaczej nadpisalibyśmy dane pustymi.
+  return SpotiCrypt.readParsed(parsed, dataKey);
+}
+async function writeJson(path, data) {
+  const text = JSON.stringify(data, null, 1);
+  await writeFile(path, (dataKey ? JSON.stringify(await SpotiCrypt.seal(text, dataKey)) : text) + '\n');
+}
+
+/** Szyfruje wszystkie jawne pliki .json w katalogu danych (np. zapisane przed włączeniem hasła). Zwraca ich liczbę. */
+export async function encryptAll(root) {
+  if (!dataKey) return 0;
+  let count = 0;
+  const walk = async (dir) => {
+    for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      if (e.name.startsWith('.')) continue;
+      const p = join(dir, e.name);
+      if (e.isDirectory()) { await walk(p); continue; }
+      if (!e.name.endsWith('.json')) continue;
+      let parsed;
+      try { parsed = JSON.parse(await readFile(p, 'utf8')); } catch { continue; }
+      if (SpotiCrypt.isBox(parsed)) continue;
+      await writeJson(p, parsed);
+      count++;
+    }
+  };
+  await walk(root);
+  if (count) console.log(`Zaszyfrowano ${count} plików z danymi.`);
+  return count;
+}
 
 function requireEnv(env, names) {
   const missing = names.filter((n) => !env[n]);
@@ -435,7 +496,14 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
     console.error('Użycie: node scripts/spotify-sync.mjs connect|sync|disconnect <katalog>');
     process.exit(2);
   }
-  run(dir).catch((err) => {
+  (async () => {
+    await initCrypto();
+    await run(dir).finally(async () => {
+      // Szyfrujemy też wtedy, gdy synchronizacja części kont się nie udała.
+      const n = await encryptAll(dir);
+      if (n && process.env.SPOTISTATS_ZNACZNIK) await writeFile(process.env.SPOTISTATS_ZNACZNIK, String(n));
+    });
+  })().catch((err) => {
     console.error(`::error::${err.message}`);
     process.exit(1);
   });

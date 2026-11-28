@@ -1449,7 +1449,7 @@
     btn.disabled = true;
     status.textContent = 'Zapisuję na GitHubie…';
     try {
-      await window.SpotiCloud.saveProfile({ token, repo: cloudRepo(), slot, profile });
+      await window.SpotiCloud.saveProfile({ token, repo: cloudRepo(), slot, profile, key: dataKey() });
       const acc = accountOf(slot);
       acc.profile = profile;
       if (profile.name) acc.name = profile.name;
@@ -1825,6 +1825,7 @@
   const getToken = () => { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } };
   const setToken = (t) => { try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch { /* ignoruj */ } };
   const cloudRepo = () => (window.SpotiLive ? window.SpotiLive.repo() : 'BartoszKrop/SpotiStats2.0');
+  const dataKey = () => (window.SpotiLive && window.SpotiLive.key ? window.SpotiLive.key() : null);
   const hasExport = () => state.exportRows.length > 0 && !(state.meta && state.meta.demo);
 
   function setCloudMsg(text, warn = false) {
@@ -1877,7 +1878,7 @@
     renderCloud();
     try {
       const manifest = await window.SpotiCloud.upload({
-        token, repo: cloudRepo(), slot, rows: state.exportRows, meta: { importedAt, name },
+        token, repo: cloudRepo(), slot, rows: state.exportRows, meta: { importedAt, name }, key: dataKey(),
         onProgress: (t) => setCloudMsg(t)
       });
       setToken(token);
@@ -1901,7 +1902,7 @@
     if (!confirm('Usunąć eksport tego konta z GitHuba? (Wgrane w przeglądarce zostaje.)')) return;
     state.cloudBusy = true;
     try {
-      await window.SpotiCloud.remove({ token, repo: cloudRepo(), slot: state.slot });
+      await window.SpotiCloud.remove({ token, repo: cloudRepo(), slot: state.slot, key: dataKey() });
       setCloudMsg('Usunięto z GitHuba.');
       await reloadAccounts();
     } catch (err) {
@@ -1972,8 +1973,61 @@
     // Podwójne stuknięcie blokuje CSS: touch-action: manipulation.
   }
 
+  // ─────────────────────────────────────────────────────── HASŁO
+  /**
+   * Dane na GitHubie są zaszyfrowane hasłem (szyfr.json + crypt.js). Pierwsze wejście na urządzeniu
+   * pyta o hasło, potem klucz zostaje w tej przeglądarce i strona już nie pyta.
+   */
+  async function passGate() {
+    const L = window.SpotiLive;
+    if (!L || !L.loadConfig || !window.SpotiCrypt || location.protocol === 'file:') return;
+    let config;
+    try { config = await L.loadConfig(); } catch { config = undefined; }
+    if (config === null) return; // szyfrowanie wyłączone
+    if (await L.restoreKey(config || null)) return;
+    if (config === undefined) return; // brak sieci i brak zapamiętanego hasła — i tak nic nie wczytamy z GitHuba
+    const gate = document.getElementById('gate');
+    const form = document.getElementById('gate-form');
+    const input = document.getElementById('gate-input');
+    const msg = document.getElementById('gate-msg');
+    const btn = document.getElementById('gate-btn');
+    document.getElementById('gate-hint').textContent = config.hint ? `Podpowiedź: ${config.hint}` : '';
+    gate.classList.remove('hidden');
+    document.body.classList.add('is-locked');
+    input.focus();
+    await new Promise((resolve) => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const pw = input.value;
+        if (!pw || btn.disabled) return;
+        btn.disabled = true;
+        msg.textContent = 'Sprawdzam…';
+        let ok = false;
+        try { ok = await L.tryPassword(pw, config); } catch (err) { msg.textContent = err.message || 'Coś poszło nie tak.'; btn.disabled = false; return; }
+        btn.disabled = false;
+        if (!ok) {
+          msg.textContent = 'Złe hasło. Spróbuj jeszcze raz.';
+          input.select();
+          form.classList.remove('is-shake'); void form.offsetWidth; form.classList.add('is-shake');
+          return;
+        }
+        msg.textContent = '';
+        resolve();
+      });
+    });
+    gate.classList.add('is-leaving');
+    document.body.classList.remove('is-locked');
+    setTimeout(() => gate.classList.add('hidden'), reduceMotion() ? 0 : 220);
+  }
+
   async function init() {
     blockZoom();
+    await passGate();
+    const lockBtn = document.getElementById('btn-lock');
+    if (lockBtn) {
+      lockBtn.classList.toggle('hidden', !dataKey());
+      lockBtn.addEventListener('click', () => { window.SpotiLive.forgetKey(); location.reload(); });
+    }
     loadPrefs();
     state.booting = Boolean(window.SpotiLive) && location.protocol !== 'file:';
     wire();
