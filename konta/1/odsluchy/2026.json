@@ -772,5 +772,41 @@
   "master_metadata_album_album_name": "Szprycer",
   "spotify_track_uri": "spotify:track:1x6whiWHJmvHM8jeloliXq",
   "source": "api"
+ },
+ {
+  "ts": "2026-11-28T14:39:55Z",
+  "ms_played": 195542,
+  "master_metadata_track_name": "Pakiet Platinium",
+  "master_metadata_album_artist_name": "Taco Hemingway",
+  "master_metadata_album_album_name": "1-800-OŚWIECENIE",
+  "spotify_track_uri": "spotify:track:7vAIFnO5Na6SjXow8z6rSx",
+  "source": "api"
+ },
+ {
+  "ts": "2026-11-28T14:43:06Z",
+  "ms_played": 195526,
+  "master_metadata_track_name": "Gelato",
+  "master_metadata_album_artist_name": "Taco Hemingway",
+  "master_metadata_album_album_name": "1-800-OŚWIECENIE",
+  "spotify_track_uri": "spotify:track:6ggmioMS1gYK0I5AAdv2NH",
+  "source": "api"
+ },
+ {
+  "ts": "2026-11-28T14:53:40Z",
+  "ms_played": 195542,
+  "master_metadata_track_name": "Pakiet Platinium",
+  "master_metadata_album_artist_name": "Taco Hemingway",
+  "master_metadata_album_album_name": "1-800-OŚWIECENIE",
+  "spotify_track_uri": "spotify:track:7vAIFnO5Na6SjXow8z6rSx",
+  "source": "api"
+ },
+ {
+  "ts": "2026-11-28T14:56:35Z",
+  "ms_played": 172400,
+  "master_metadata_track_name": "Grill u Gawrona",
+  "master_metadata_album_artist_name": "Białas",
+  "master_metadata_album_album_name": "In hajs we trust 2",
+  "spotify_track_uri": "spotify:track:7dhukTnKwiR8TfkymCBVRN",
+  "source": "api"
  }
 ]
