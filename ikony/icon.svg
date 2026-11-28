@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="30%" cy="18%" r="95%">
+      <stop offset="0" stop-color="#26332b"/>
+      <stop offset="0.45" stop-color="#151816"/>
+      <stop offset="1" stop-color="#0a0a0a"/>
+    </radialGradient>
+    <linearGradient id="bar" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#109c45"/>
+      <stop offset="1" stop-color="#3ff08a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="78%" r="50%">
+      <stop offset="0" stop-color="#1ed760" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#1ed760" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <rect width="512" height="512" fill="url(#glow)"/>
+  <g transform="translate(0 26)">
+  <g fill="url(#bar)">
+    <rect x="132" y="262" width="48" height="114" rx="24"/>
+    <rect x="204" y="198" width="48" height="178" rx="24"/>
+    <rect x="276" y="234" width="48" height="142" rx="24"/>
+    <rect x="348" y="146" width="48" height="230" rx="24"/>
+  </g>
+  <polyline points="156,218 228,154 300,190 372,104" fill="none" stroke="#fff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" opacity="0.92"/>
+  <circle cx="372" cy="104" r="20" fill="#fff"/>
+  </g>
+</svg>
