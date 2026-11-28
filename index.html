@@ -5,14 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#121212" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="./ikony/apple-touch-icon.png" />
+    <link rel="icon" href="./ikony/icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="./ikony/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="./ikony/apple-touch-icon.png?v=2" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="SpotiStats" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=29" />
+    <link rel="stylesheet" href="./styles.css?v=30" />
   </head>
   <body>
     <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -36,7 +38,7 @@
     <!-- ─── KTO SŁUCHA? (wybór konta) ─────────────────────── -->
     <section id="who" class="who hidden" aria-labelledby="who-title">
       <div class="who-inner">
-        <span class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg></span><span class="brand-name">SpotiStats</span></span>
+        <span class="brand"><span class="brand-mark" aria-hidden="true"><img src="./ikony/icon.svg" width="26" height="26" alt="" /></span><span class="brand-name">SpotiStats</span></span>
         <h1 id="who-title" class="who-title">Kto słucha?</h1>
         <ul id="who-list" class="who-list"></ul>
         <p id="who-loading" class="who-loading hidden"><span class="spinner spinner--sm" aria-hidden="true"></span>Wczytuję konta…</p>
@@ -48,7 +50,7 @@
       <!-- ─── PASEK BOCZNY ─────────────────────────────────── -->
       <aside class="sidebar" aria-label="Nawigacja">
         <a class="brand" href="./">
-          <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg></span>
+          <span class="brand-mark" aria-hidden="true"><img src="./ikony/icon.svg" width="22" height="22" alt="" /></span>
           <span class="brand-name">SpotiStats</span>
         </a>
 
