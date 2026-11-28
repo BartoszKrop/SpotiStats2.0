@@ -24,6 +24,10 @@ on:
         description: 'Odłącz to konto i usuń jego dane'
         type: boolean
         default: false
+      wyczysc_historie:
+        description: 'Po zaszyfrowaniu: usuń starą (jawną) historię gałęzi dane — zostaje jeden commit z obecnymi, zaszyfrowanymi plikami. Nieodwracalne.'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -58,6 +62,7 @@ jobs:
         if: ${{ inputs.odlacz == true }}
         env:
           SPOTIFY_SLOT: ${{ inputs.konto }}
+          SPOTISTATS_HASLO: ${{ secrets.SPOTISTATS_HASLO }}
         run: node app/scripts/spotify-sync.mjs disconnect dane
 
       - name: Połącz ze Spotify
@@ -68,6 +73,7 @@ jobs:
           SPOTIFY_CODE: ${{ inputs.code }}
           SPOTIFY_SLOT: ${{ inputs.konto }}
           SPOTIFY_NAME: ${{ inputs.nazwa }}
+          SPOTISTATS_HASLO: ${{ secrets.SPOTISTATS_HASLO }}
         run: node app/scripts/spotify-sync.mjs connect dane
 
       - name: Dociągnij ostatnie odsłuchy
@@ -75,12 +81,25 @@ jobs:
         env:
           SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
           SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+          SPOTISTATS_HASLO: ${{ secrets.SPOTISTATS_HASLO }}
         run: node app/scripts/spotify-sync.mjs sync dane
 
       - name: Zapisz zmiany na gałęzi „dane”
         if: always()
         working-directory: dane
         run: |
+          if [ "${{ inputs.wyczysc_historie }}" = "true" ]; then
+            # Tylko na wyraźne życzenie (Run workflow → „usuń starą historię”) i tylko gdy wszystko jest już zaszyfrowane.
+            if grep -rLs --include='*.json' '"szyfr":1' . | grep -v '^./.git/' | grep -q .; then
+              echo "::error::Nie wszystkie pliki są zaszyfrowane (brak sekretu SPOTISTATS_HASLO?) — historii nie ruszam."; exit 1
+            fi
+            git checkout -q --orphan nowa-dane
+            git add -A
+            git -c user.name="spotistats-bot" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "Dane zaszyfrowane (bez starej historii) $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push -q --force origin HEAD:dane
+            echo "Historia gałęzi dane wyczyszczona."; exit 0
+          fi
           git add -A
           if git diff --cached --quiet; then echo "Bez zmian."; exit 0; fi
           git -c user.name="spotistats-bot" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \

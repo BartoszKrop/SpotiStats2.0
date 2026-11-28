@@ -73,7 +73,19 @@
     return res.json();
   }
 
-  async function putFile(token, repo, path, text, message) {
+  /** Z kluczem (hasło strony) plik idzie na GitHuba zaszyfrowany — patrz crypt.js. */
+  async function sealText(text, key) {
+    if (!key) return text;
+    const C = root.SpotiCrypt || (typeof require === 'function' ? require('./crypt.js') : null);
+    return JSON.stringify(await C.seal(text, key));
+  }
+  async function openParsed(parsed, key) {
+    const C = root.SpotiCrypt || (typeof require === 'function' ? require('./crypt.js') : null);
+    return C ? C.readParsed(parsed, key) : parsed;
+  }
+
+  async function putFile(token, repo, path, text, message, key) {
+    text = await sealText(text, key);
     for (let attempt = 0; attempt < 4; attempt++) {
       const existing = await getFile(token, repo, path);
       const res = await gh(token, repo, 'PUT', path, { message, content: toBase64(text), branch: BRANCH, ...(existing ? { sha: existing.sha } : {}) });
@@ -91,24 +103,24 @@
     if (!res.ok) throw new CloudError(`GitHub: ${res.status}`);
   }
 
-  async function readManifest(token, repo, slot) {
+  async function readManifest(token, repo, slot, key) {
     const f = await getFile(token, repo, `konta/${slot}/eksport.json`);
     if (!f) return null;
-    try { return JSON.parse(decodeURIComponent(escape(atob(f.content.replace(/\n/g, ''))))); } catch { return null; }
+    try { return await openParsed(JSON.parse(decodeURIComponent(escape(atob(f.content.replace(/\n/g, ''))))), key); } catch { return null; }
   }
 
   /**
    * Wysyła wiersze konta na gałąź „dane”. onProgress(tekst) — do wyświetlania postępu.
    * meta: { importedAt, name }.
    */
-  async function upload({ token, repo, slot, rows, meta, onProgress = () => {} }) {
+  async function upload({ token, repo, slot, rows, meta, key = null, onProgress = () => {} }) {
     const byYear = encodeRows(rows);
     const years = Object.keys(byYear).sort();
-    const old = await readManifest(token, repo, slot);
+    const old = await readManifest(token, repo, slot, key);
     let i = 0;
     for (const y of years) {
       onProgress(`Wysyłam ${y} (${++i}/${years.length})…`);
-      await putFile(token, repo, `konta/${slot}/eksport/${y}.json`, JSON.stringify(byYear[y]), `Eksport konta ${slot}: ${y}`);
+      await putFile(token, repo, `konta/${slot}/eksport/${y}.json`, JSON.stringify(byYear[y]), `Eksport konta ${slot}: ${y}`, key);
     }
     const files = years.map((y) => `eksport/${y}.json`);
     for (const f of (old && old.files) || []) {
@@ -124,20 +136,20 @@
       to: rows.length ? rows[rows.length - 1].t : null
     };
     onProgress('Zapisuję spis…');
-    await putFile(token, repo, `konta/${slot}/eksport.json`, JSON.stringify(manifest, null, 1), `Eksport konta ${slot}: spis`);
+    await putFile(token, repo, `konta/${slot}/eksport.json`, JSON.stringify(manifest, null, 1), `Eksport konta ${slot}: spis`, key);
     return manifest;
   }
 
   /** Usuwa eksport konta z GitHuba (pliki lat i spis). Odsłuchy z automatu zostają. */
-  async function remove({ token, repo, slot }) {
-    const m = await readManifest(token, repo, slot);
+  async function remove({ token, repo, slot, key = null }) {
+    const m = await readManifest(token, repo, slot, key);
     for (const f of (m && m.files) || []) await deleteFile(token, repo, `konta/${slot}/${f}`, `Eksport konta ${slot}: usunięto ${f}`);
     await deleteFile(token, repo, `konta/${slot}/eksport.json`, `Eksport konta ${slot}: usunięto spis`);
   }
 
   /** Profil konta (nazwa, zdjęcie profilowe, tło) — konta/<n>/profil.json. Zdjęcia jako data URL (już zmniejszone). */
-  async function saveProfile({ token, repo, slot, profile }) {
-    await putFile(token, repo, `konta/${slot}/profil.json`, JSON.stringify(profile), `Profil konta ${slot}`);
+  async function saveProfile({ token, repo, slot, profile, key = null }) {
+    await putFile(token, repo, `konta/${slot}/profil.json`, JSON.stringify(profile), `Profil konta ${slot}`, key);
   }
 
   const API_EXPORT = { encodeRows, decodeRows, upload, remove, saveProfile, CloudError };

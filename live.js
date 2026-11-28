@@ -29,12 +29,55 @@
   const rawUrl = (path) => `https://raw.githubusercontent.com/${repo()}/${BRANCH}/${path}`;
   const actionsUrl = () => `https://github.com/${repo()}/actions/workflows/spotify-sync.yml`;
 
+  // ─── hasło: dane na gałęzi „dane” są zaszyfrowane (crypt.js), klucz trzymamy w tej przeglądarce
+  const KEY_STORE = 'ss_klucz';
+  let dataKey = null;
+  const key = () => dataKey;
+
+  /** szyfr.json leży obok strony (gałąź main). null = szyfrowanie wyłączone. */
+  async function loadConfig() {
+    const res = await fetch(`./szyfr.json?t=${Math.floor(Date.now() / 60_000)}`, { cache: 'no-store' });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  /** Klucz zapamiętany na tym urządzeniu. config = null (np. brak sieci) — bierzemy go bez sprawdzania. */
+  async function restoreKey(config) {
+    const C = root.SpotiCrypt;
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(KEY_STORE) || 'null'); } catch { /* brak localStorage */ }
+    if (!C || !saved || !saved.k) return false;
+    if (config && saved.salt !== config.salt) return false; // hasło zmienione
+    try {
+      const k = await C.importKey(saved.k);
+      if (config && !(await C.verify(k, config))) return false;
+      dataKey = k;
+      return true;
+    } catch { return false; }
+  }
+
+  /** Sprawdza hasło; dobre — zapamiętuje klucz na tym urządzeniu. */
+  async function tryPassword(password, config) {
+    const k = await root.SpotiCrypt.unlock(password, config);
+    if (!k) return false;
+    dataKey = k;
+    try { localStorage.setItem(KEY_STORE, JSON.stringify({ salt: config.salt, k: await root.SpotiCrypt.exportKey(k) })); } catch { /* tylko na tę sesję */ }
+    return true;
+  }
+
+  function forgetKey() {
+    dataKey = null;
+    try { localStorage.removeItem(KEY_STORE); } catch { /* ignoruj */ }
+  }
+
   async function getJson(path) {
     // Parametr omija cache przeglądarki; raw.githubusercontent.com sam cache’uje do ~5 min.
     const res = await fetch(`${rawUrl(path)}?t=${Math.floor(Date.now() / 60_000)}`, { cache: 'no-store' });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+    const parsed = await res.json();
+    return root.SpotiCrypt ? root.SpotiCrypt.readParsed(parsed, dataKey) : parsed;
   }
 
   const emptySlots = () => Array.from({ length: SLOTS }, (_, i) => ({ slot: i + 1, name: null }));
@@ -105,5 +148,5 @@
     return (Date.now() - Date.parse(account.connectedAt)) / 86_400_000;
   }
 
-  root.SpotiLive = { CLIENT_ID, SLOTS, repo, rawUrl, actionsUrl, loadAccounts, loadRows, loadExportRows, loadArtistImages, loadAlbumCovers, tokenAgeDays, TOKEN_LIFETIME_DAYS };
+  root.SpotiLive = { key, loadConfig, restoreKey, tryPassword, forgetKey, CLIENT_ID, SLOTS, repo, rawUrl, actionsUrl, loadAccounts, loadRows, loadExportRows, loadArtistImages, loadAlbumCovers, tokenAgeDays, TOKEN_LIFETIME_DAYS };
 })(globalThis);

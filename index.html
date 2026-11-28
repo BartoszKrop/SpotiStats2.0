@@ -14,7 +14,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <title>SpotiStats</title>
     <meta name="description" content="Twoje statystyki słuchania Spotify z pełnego eksportu historii — prywatnie, w przeglądarce." />
-    <link rel="stylesheet" href="./styles.css?v=30" />
+    <link rel="stylesheet" href="./styles.css?v=31" />
   </head>
   <body>
     <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -35,6 +35,20 @@
         <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       </defs>
     </svg>
+    <!-- ─── HASŁO (pierwsze wejście na urządzeniu) ─────────── -->
+    <section id="gate" class="who gate hidden" aria-labelledby="gate-title">
+      <form id="gate-form" class="who-inner gate-inner" autocomplete="on">
+        <span class="brand"><span class="brand-mark" aria-hidden="true"><img src="./ikony/icon.svg" width="26" height="26" alt="" /></span><span class="brand-name">SpotiStats</span></span>
+        <h1 id="gate-title" class="who-title">Podaj hasło</h1>
+        <p id="gate-hint" class="gate-hint"></p>
+        <input type="text" name="username" value="SpotiStats" autocomplete="username" hidden />
+        <input id="gate-input" class="field-input gate-input" type="password" name="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" aria-label="Hasło" aria-describedby="gate-hint gate-msg" />
+        <button id="gate-btn" class="btn btn--primary" type="submit">Wejdź</button>
+        <p id="gate-msg" class="gate-msg" role="alert" aria-live="polite"></p>
+        <p class="who-note">Hasło wpisujesz raz — zapamiętam je na tym urządzeniu.</p>
+      </form>
+    </section>
+
     <!-- ─── KTO SŁUCHA? (wybór konta) ─────────────────────── -->
     <section id="who" class="who hidden" aria-labelledby="who-title">
       <div class="who-inner">
@@ -89,6 +103,7 @@
                 <input id="reimport-files" type="file" accept=".zip,.json,application/json,application/zip" multiple class="sr-only" tabindex="-1" />
               </label>
               <a class="menu-item" role="menuitem" href="./spotify.html"><svg class="ico" aria-hidden="true"><use href="#i-sync"/></svg><span>Automat Spotify<small>dociąganie nowych odsłuchów</small></span></a>
+              <button id="btn-lock" class="menu-item hidden" type="button" role="menuitem"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg><span>Zapomnij hasło<small>to urządzenie znów zapyta o hasło</small></span></button>
               <button class="menu-item" type="button" role="menuitem" data-logout><svg class="ico" aria-hidden="true"><use href="#i-user"/></svg><span>Zmień konto<small>wyloguj i wróć do wyboru osoby</small></span></button>
               <button id="btn-clear-data" class="menu-item menu-item--danger" type="button" role="menuitem"><svg class="ico" aria-hidden="true"><use href="#i-trash"/></svg><span>Usuń eksport z przeglądarki</span></button>
             </div>
@@ -342,11 +357,12 @@
     </div>
 
     <script src="./jszip.min.js"></script>
-    <script src="./analytics.js?v=29"></script>
-    <script src="./charts.js?v=29"></script>
-    <script src="./art.js?v=29"></script>
-    <script src="./cloud.js?v=29"></script>
-    <script src="./live.js?v=29"></script>
-    <script src="./app.js?v=29"></script>
+    <script src="./analytics.js?v=30"></script>
+    <script src="./charts.js?v=30"></script>
+    <script src="./art.js?v=30"></script>
+    <script src="./crypt.js?v=1"></script>
+    <script src="./cloud.js?v=30"></script>
+    <script src="./live.js?v=30"></script>
+    <script src="./app.js?v=30"></script>
   </body>
 </html>

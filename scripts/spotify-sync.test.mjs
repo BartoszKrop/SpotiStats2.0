@@ -225,3 +225,44 @@ test('recordFreshImages: okładki z utworów i zdjęcia wykonawców po id (dokł
   assert.equal(art.eden.img, 'https://i/a320');
   assert.equal((await recordFreshImages(root, 'acc', items)).newArtists, 0); // już dokładne — bez ponownego pytania
 });
+
+test('szyfrowanie: z hasłem pliki są zaszyfrowane, jawne dane zostają zaszyfrowane, złe hasło — błąd', async () => {
+  const { initCrypto, encryptAll, resetCrypto } = await import('./spotify-sync.mjs');
+  const { createRequire } = await import('node:module');
+  const C = createRequire(import.meta.url)('../crypt.js');
+  const root = await mkdtemp(join(tmpdir(), 'ss-enc-'));
+  const { config } = await C.createConfig('psina', { iter: 1000 });
+  const cfgPath = join(root, 'szyfr-test.json');
+  await writeFile(cfgPath, JSON.stringify(config));
+  const data = join(root, 'dane');
+  await mkdir(join(data, 'konta', '1', 'odsluchy'), { recursive: true });
+  await writeFile(join(data, 'konta', '1', 'odsluchy', '2026.json'), JSON.stringify([{ ts: '2026-01-01T00:00:00Z', master_metadata_track_name: 'Jawne' }]));
+  await writeFile(join(data, 'wykonawcy.json'), JSON.stringify({ sanah: { name: 'Sanah' } }));
+
+  await assert.rejects(initCrypto({ SPOTISTATS_HASLO: 'zle' }, cfgPath), /nie pasuje/);
+  assert.equal((await initCrypto({}, cfgPath)).mode, 'bez-hasla');
+  assert.equal(await encryptAll(data), 0, 'bez hasła nic nie szyfruje');
+
+  assert.equal((await initCrypto({ SPOTISTATS_HASLO: 'psina' }, cfgPath)).mode, 'szyfrowane');
+  assert.equal(await encryptAll(data), 2);
+  assert.equal(await encryptAll(data), 0, 'drugi raz nic');
+  const raw = await readFile(join(data, 'konta', '1', 'odsluchy', '2026.json'), 'utf8');
+  assert.ok(!raw.includes('Jawne'));
+  const key = await C.unlock('psina', config);
+  assert.equal((await C.readParsed(JSON.parse(raw), key))[0].master_metadata_track_name, 'Jawne');
+
+  // Synchronizacja dopisuje do zaszyfrowanego pliku (czyta i zapisuje z kluczem).
+  const dir = join(data, 'konta', '1');
+  await writeFile(join(dir, 'token.json'), JSON.stringify(encryptToken('r', 'sekret')));
+  mockFetch((url) => url.includes('/token') ? { body: { access_token: 'a' } } : { body: { items: [item('2026-11-26T17:00:00Z', 'Nowe')] } });
+  await sync(dir, env);
+  const rows = await C.readParsed(JSON.parse(await readFile(join(dir, 'odsluchy', '2026.json'), 'utf8')), key);
+  assert.deepEqual(rows.map((r) => r.master_metadata_track_name), ['Jawne', 'Nowe']);
+  assert.ok(C.isBox(JSON.parse(await readFile(join(dir, 'status.json'), 'utf8'))));
+
+  // Bez hasła zaszyfrowanego pliku nie da się po cichu nadpisać.
+  resetCrypto();
+  await assert.rejects(sync(dir, env), (e) => e.code === 'locked');
+  const still = await C.readParsed(JSON.parse(await readFile(join(dir, 'odsluchy', '2026.json'), 'utf8')), key);
+  assert.equal(still.length, 2);
+});

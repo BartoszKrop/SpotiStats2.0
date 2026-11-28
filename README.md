@@ -11,7 +11,8 @@ Statystyki słuchania Spotify w stylu stats.fm, liczone z **pełnego eksportu hi
 - **Top 10** wykonawców, utworów i albumów — sortowanie wg czasu albo wg liczby odtworzeń.
 - **Ranking w czasie** — przełącznik Minuty / Pozycja (miejsce w rankingu w każdym okresie); wykres liniowy minut słuchania (dni / tygodnie / miesiące) dla top 10 wykonawców albo utworów z wybranego zakresu; legenda pozwala włączać i wyłączać linie.
 - **Na szczycie** — kto jest nr 1 w tym tygodniu, najdłuższa seria na nr 1, najwięcej tygodni na szczycie i największe tygodnie (wykonawcy albo utwory).
-- **Logowanie na konto** — przy wejściu ekran „Kto słucha?”: wybierasz osobę i widzisz tylko jej statystyki; „Zmień konto” (w menu „⋯” albo klik w awatar) wraca do wyboru. To wybór profilu, nie hasło — dane i tak są publiczne na gałęzi `dane`.
+- **Hasło do strony** — pierwsze wejście na danym urządzeniu pyta o hasło (z podpowiedzią), potem przeglądarka je pamięta. Wszystkie pliki na gałęzi `dane` są zaszyfrowane tym hasłem (AES-256-GCM, klucz z PBKDF2), więc bez niego nie da się ich odczytać ani ze strony, ani z repo. „Zapomnij hasło” w menu „⋯” blokuje urządzenie z powrotem.
+- **Logowanie na konto** — po haśle ekran „Kto słucha?”: wybierasz osobę i widzisz tylko jej statystyki; „Zmień konto” (w menu „⋯” albo klik w awatar) wraca do wyboru.
 - **5 kont** — Ty + 4 znajomych (limit Spotify dla prywatnych aplikacji). Każde konto ma osobny eksport w przeglądarce i osobny automat.
 - **Wykonawca w czasie** — wykres dowolnego wykonawcy (wyszukiwarka albo klik w topce), cały czas lub wybrany zakres, do tego jego najczęściej słuchane utwory.
 - **Karta wykonawcy** — klik w dowolnego wykonawcę (topka, utwór, rekord) otwiera jego kartę na wierzchu; gest/przycisk „wstecz” ją zamyka.
@@ -32,6 +33,14 @@ Jak w stats.fm: eksport wczytujesz raz, a nowe odsłuchy dociągają się same.
 - Spotify unieważnia logowanie po ok. 6 miesiącach — strona pokaże baner i trzeba zalogować się ponownie.
 
 Konfiguracja krok po kroku jest na podstronie **`spotify.html`** (link „⟳ Automat” w górnym pasku). W skrócie: aplikacja na developer.spotify.com (wymaga Premium), dwa sekrety w repo (`SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`), logowanie na `spotify.html` i przekazanie kodu do workflow przez **Run workflow**.
+
+## Hasło i szyfrowanie
+
+- `szyfr.json` (w repo) to sól, liczba iteracji, podpowiedź i zaszyfrowany „sprawdzacz” hasła. Samego hasła nie ma w repo.
+- Automat szyfruje dane hasłem z sekretu Actions **`SPOTISTATS_HASLO`** (Settings → Secrets and variables → Actions). Bez sekretu zapisuje jeszcze jawnie (z ostrzeżeniem w logu); po dodaniu sekretu przy najbliższym uruchomieniu szyfruje wszystkie jawne pliki.
+- Stara, jawna historia gałęzi `dane`: Run workflow → zaznacz „usuń starą (jawną) historię gałęzi dane”. Zostaje jeden commit z zaszyfrowanymi plikami.
+- Zmiana hasła: nowy `szyfr.json` (`node -e` z `crypt.js` → `createConfig`) wymaga też ponownego zaszyfrowania danych — najprościej poprosić Claude'a.
+- Ochrona jest na miarę hasła: krótkie hasło z podpowiedzią odsiewa przypadkowe osoby, ale zdeterminowany ktoś może je zgadnąć offline.
 
 ## Jak zdobyć dane
 
@@ -64,7 +73,8 @@ node --test
 | `analytics.js` | czyste funkcje: normalizacja, zakresy, topki, osie czasu |
 | `charts.js` | wykres liniowy w SVG |
 | `jszip.min.js` | odczyt .zip (lokalnie, bez CDN) |
-| `live.js` | odczyt dociągniętych odsłuchów z gałęzi `dane` |
+| `live.js` | odczyt dociągniętych odsłuchów z gałęzi `dane`, ekran hasła (klucz) |
+| `crypt.js`, `szyfr.json` | szyfrowanie danych hasłem (przeglądarka i automat) |
 | `spotify.html` | jednorazowe połączenie automatu ze Spotify |
 | `scripts/spotify-sync.mjs` | skrypt automatu (GitHub Actions) |
 

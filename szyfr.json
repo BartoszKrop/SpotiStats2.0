@@ -1,0 +1,11 @@
+{
+ "v": 1,
+ "iter": 600000,
+ "salt": "Jv5ETI18HJcwJKb9juywWg==",
+ "hint": "imię psa małymi literami",
+ "check": {
+  "szyfr": 1,
+  "iv": "KbxQhgYoiZFugw3F",
+  "d": "P03vJnNlbFhQ0QGLob3QVTW7H6GUG9xjVd0="
+ }
+}
