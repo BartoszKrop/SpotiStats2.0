@@ -808,5 +808,14 @@
   "master_metadata_album_album_name": "In hajs we trust 2",
   "spotify_track_uri": "spotify:track:7dhukTnKwiR8TfkymCBVRN",
   "source": "api"
+ },
+ {
+  "ts": "2026-11-28T14:59:38Z",
+  "ms_played": 188080,
+  "master_metadata_track_name": "Może To Coś Zmieni?",
+  "master_metadata_album_artist_name": "Taco Hemingway",
+  "master_metadata_album_album_name": "1-800-OŚWIECENIE",
+  "spotify_track_uri": "spotify:track:13G5bpGzFMaqx2mYPvbjHC",
+  "source": "api"
  }
 ]

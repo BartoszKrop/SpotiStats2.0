@@ -4,8 +4,8 @@
    "slot": 1,
    "name": null,
    "connectedAt": "2026-11-26T18:30:14.414Z",
-   "lastSync": "2026-11-28T14:56:47.646Z",
-   "lastPlayedAt": "2026-11-28T14:56:35.945Z",
+   "lastSync": "2026-11-28T15:22:03.790Z",
+   "lastPlayedAt": "2026-11-28T14:59:38.980Z",
    "error": null,
    "files": [
     "odsluchy/2026.json"
@@ -28,5 +28,5 @@
    "name": null
   }
  ],
- "updatedAt": "2026-11-28T14:56:48.244Z"
+ "updatedAt": "2026-11-28T15:22:03.863Z"
 }
