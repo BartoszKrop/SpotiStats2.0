@@ -835,5 +835,68 @@
   "master_metadata_album_album_name": "Juz Zmrok",
   "spotify_track_uri": "spotify:track:2DdO5yhUCzK7KnbG3Tpy3D",
   "source": "api"
+ },
+ {
+  "ts": "2026-11-28T17:33:41Z",
+  "ms_played": 180980,
+  "master_metadata_track_name": "Je ne parle pas français",
+  "master_metadata_album_artist_name": "Namika",
+  "master_metadata_album_album_name": "Que Walou",
+  "spotify_track_uri": "spotify:track:4eJqzRN15DabYK4byfWghD",
+  "source": "api"
+ },
+ {
+  "ts": "2026-11-28T17:36:56Z",
+  "ms_played": 199854,
+  "master_metadata_track_name": "Liebe ist...",
+  "master_metadata_album_artist_name": "Namika",
+  "master_metadata_album_album_name": "Liebe ist...",
+  "spotify_track_uri": "spotify:track:4JyAfSflZjJQe9Wtjf9IoE",
+  "source": "api"
+ },
+ {
+  "ts": "2026-11-28T17:39:33Z",
+  "ms_played": 161882,
+  "master_metadata_track_name": "Vermissen (feat. Henning May)",
+  "master_metadata_album_artist_name": "Juju",
+  "master_metadata_album_album_name": "Bling Bling",
+  "spotify_track_uri": "spotify:track:07f2b3CTdgKKlhv0mqUksz",
+  "source": "api"
+ },
+ {
+  "ts": "2026-11-28T17:43:02Z",
+  "ms_played": 213733,
+  "master_metadata_track_name": "Wenn sie tanzt",
+  "master_metadata_album_artist_name": "Max Giesinger",
+  "master_metadata_album_album_name": "Der Junge, der rennt",
+  "spotify_track_uri": "spotify:track:2yEPMTjt6Jp7yS9zh12ZHb",
+  "source": "api"
+ },
+ {
+  "ts": "2026-11-28T17:44:57Z",
+  "ms_played": 120000,
+  "master_metadata_track_name": "Für immer Frühling",
+  "master_metadata_album_artist_name": "SOFFIE",
+  "master_metadata_album_album_name": "Für immer Frühling",
+  "spotify_track_uri": "spotify:track:3pn5z4CvMz95uEysWBUYCc",
+  "source": "api"
+ },
+ {
+  "ts": "2026-11-28T17:48:12Z",
+  "ms_played": 182601,
+  "master_metadata_track_name": "derschönstetaginmeinemleben",
+  "master_metadata_album_artist_name": "FäaschtBänkler",
+  "master_metadata_album_album_name": "Der schönste Tag in meinem Leben",
+  "spotify_track_uri": "spotify:track:5Kprro514Oz085OBVgi0V6",
+  "source": "api"
+ },
+ {
+  "ts": "2026-11-28T17:53:35Z",
+  "ms_played": 163601,
+  "master_metadata_track_name": "ALL IN (Lieblingslieder)",
+  "master_metadata_album_artist_name": "FäaschtBänkler",
+  "master_metadata_album_album_name": "ALL IN (Lieblingslieder)",
+  "spotify_track_uri": "spotify:track:3VIEbpdr64a1mNSa8MqBAm",
+  "source": "api"
  }
 ]
