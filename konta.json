@@ -4,9 +4,9 @@
    "slot": 1,
    "name": null,
    "connectedAt": "2026-11-26T18:30:14.414Z",
-   "lastSync": "2026-11-27T21:52:38.829Z",
+   "lastSync": "2026-11-28T03:48:25.796Z",
    "lastPlayedAt": "2026-11-27T21:12:25.345Z",
-   "error": "Spotify API: 503 ",
+   "error": null,
    "files": [
     "odsluchy/2026.json"
    ]
@@ -28,5 +28,5 @@
    "name": null
   }
  ],
- "updatedAt": "2026-11-27T22:18:06.642Z"
+ "updatedAt": "2026-11-28T03:48:25.843Z"
 }
